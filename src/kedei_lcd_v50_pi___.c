@@ -26,6 +26,8 @@
 
 #define LCD_CS 1
 #define TOUCH_CS 0
+//#define LCD_WIDTH  480
+//#define LCD_HEIGHT 320
 
 uint8_t lcd_rotations[4] = {
 	0b11101010,	//   0
@@ -65,12 +67,17 @@ void delayms(int ms) {
 
 
 int lcd_open(void) {
+	printf("lcd_open");
 	int r;
 	//uint32_t v;
+	printf("bcm2835_init");
 	r = bcm2835_init();
+	printf("after bcm2835_init");
 	if(r!=1) return -1;
 
+	printf("bcm2835_spi_begin");
 	bcm2835_spi_begin();
+	printf("bcm2835_spi_setBitOrder");
 	bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);
 	bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);
 	// 8=NG
@@ -124,25 +131,6 @@ void lcd_cmd(uint8_t cmd) {
 	spi_transmit(LCD_CS, &b1[0], sizeof(b1));
 }
 
-// 16 bit
-/*void lcd_data(uint8_t dat) {
-	/ *uint8_t b1[2];
-
-	b1[0] = dat>>1;
-	b1[1] = ((dat&1)<<5) | 0x15;
-	spi_transmit(LCD_CS, &b1[0], sizeof(b1));
-
-	//b1[0] = dat>>1;
-	b1[1] = ((dat&1)<<5) | 0x1F;
-	spi_transmit(LCD_CS, &b1[0], sizeof(b1));* /
-	
-	uint8_t b1[4];
-	b1[0] = dat>>1;
-	b1[1] = ((dat&1)<<5) | 0x15;
-	b1[2] = b1[0];
-	b1[3] = ((dat&1)<<5) | 0x1F;
-	spi_transmit(LCD_CS, &b1[0], sizeof(b1));
-}*/
 
 void lcd_data(uint8_t dat) {
 	uint8_t b1[2];
@@ -156,14 +144,11 @@ void lcd_data(uint8_t dat) {
 	spi_transmit(LCD_CS, &b1[0], sizeof(b1));
 }
 
-void lcd_data16(uint16_t dat) {
-	lcd_data(dat >> 8); lcd_data(dat & 0xFF);
-}
 
 void lcd_color(uint16_t col) {
 	uint8_t b1[3];
 
-	// 18bit color mode ???  8 bit?
+	// 18bit color mode ???
 	// 0xF800 R(R5-R1, DB17-DB13)
 	// 0x07E0 G(G5-G0, DB11- DB6)
 	// 0x001F B(B5-B1, DB5 - DB1)
@@ -176,9 +161,8 @@ void lcd_color(uint16_t col) {
 	b1[2]= pseud | 0x15;
 	spi_transmit(LCD_CS, &b1[0], sizeof(b1));
 
-	//
-	//b1[0]= col>>8;
-	//b1[1]= col&0x00FF;
+	b1[0]= col>>8;
+	b1[1]= col&0x00FF;
 	b1[2]= pseud | 0x1F;
 	spi_transmit(LCD_CS, &b1[0], sizeof(b1));
 }
@@ -288,7 +272,7 @@ void lcd_init(enum lcd_rotations rotation) {
 	lcd_cmd(0xC5); lcd_data(0x08);
 
 	// 36 2A
-	lcd_setrotation(rotation);
+	lcd_setrotation(0);
 	lcd_cmd(0x3A); lcd_data(0x66);	// RGB666 18bit color
 	//	2A 00 00 01 3F
 	//	2B 00 00 01 E0
@@ -305,8 +289,8 @@ void lcd_init(enum lcd_rotations rotation) {
 
 void lcd_setframe(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 	lcd_cmd(0x2A);
-	lcd_data(x >> 8); lcd_data(x & 0xFF);
-	lcd_data(((w + x) - 1) >> 8); lcd_data(((w+x)-1)&0xFF);
+	lcd_data(x>>8); lcd_data(x&0xFF);
+	lcd_data(((w+x)-1)>>8); lcd_data(((w+x)-1)&0xFF);
 	lcd_cmd(0x2B);
 	lcd_data(y>>8); lcd_data(y&0xFF);
 	lcd_data(((h+y)-1)>>8); lcd_data(((h+y)-1)&0xFF);
@@ -340,6 +324,7 @@ void lcd_fillRGB(uint8_t r, uint8_t g, uint8_t b) {
 
 
 void lcd_img(char *fname, uint16_t x, uint16_t y) {
+
 	uint8_t buf[54];
 	uint16_t p, c;
 	uint32_t isize, ioffset, iwidth, iheight, ibpp, fpos, rowbytes;
@@ -359,12 +344,7 @@ void lcd_img(char *fname, uint16_t x, uint16_t y) {
 		printf("File Size: %lu\nOffset: %lu\nWidth: %lu\nHeight: %lu\nBPP: %lu\n\n",isize,ioffset,iwidth,iheight,ibpp);
 
 		lcd_setframe(x,y,iwidth,iheight); //set the active frame...
-		uint8_t d = (iwidth * 3) % 4;
-		rowbytes = (iwidth * 3);
-		if(d > 0)
-		{
-			rowbytes += 4 - d;
-		}
+		rowbytes=(iwidth*3) + 4-((iwidth*3)%4);
 		for (p=iheight-1;p>0;p--) {
 			// p = relative page address (y)
 			fpos = ioffset+(p*rowbytes);
