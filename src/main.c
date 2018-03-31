@@ -31,6 +31,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <ctype.h>
+#include <time.h>
 
 #include "kedei_lcd_v50_pi_pigpio.h"
 
@@ -38,25 +39,265 @@
 // Size of signature
 #define SIGNATURE_SIZE 4
 // 24bit colors for speed
-#define SCREEN_BUFFER (LCD_WIDTH * LCD_HEIGHT * 3)
+// bytes in one line
+#define SCREEN_BUF_LINE_LEN LCD_WIDTH * 3
+#define SCREEN_BUFFER_LEN (LCD_WIDTH * SCREEN_BUF_LINE_LEN)
+#define READ_TIMEOUT_US 200
 
 int client_to_server;
-char buf[MYBUF];
+//char buf[MYBUF];
+uint8_t screen_buffer[SCREEN_BUFFER_LEN];
 
 bool compare_signature(uint8_t sig[], char* val)
 {
 	int len = strlen(val);
-	if(len != SIGNATURE_SIZE)
+	if(len > SIGNATURE_SIZE)
 	{
 		printf("Error! compare signature with wrong len! Need: %d, found: %s (%d)\n", SIGNATURE_SIZE, val, len);
 		return false;
 	}
-	for(uint8_t i = 0; i < SIGNATURE_SIZE; i++)
+	for(uint8_t i = 0; i < len; i++)
 	{
 		if(sig[i] != val[i])
 			return false;
 	}
 	return true;
+}
+
+// read with timeout
+bool my_read(int fdesc, void *buf, int count)
+{
+	unsigned short readed = 0;
+	struct timespec gettime_now;
+	long int start_time;
+	long int time_difference;
+	clock_gettime(CLOCK_REALTIME, &gettime_now);
+	start_time = gettime_now.tv_nsec;
+	while(readed < count)
+	{
+		int cur_read = read(fdesc, buf, count - readed);
+		if(cur_read < 0)
+		{
+			perror("read");
+			return false;
+		}
+		readed += cur_read;
+		if(readed != count)
+		{
+			clock_gettime(CLOCK_REALTIME, &gettime_now);
+			time_difference = gettime_now.tv_nsec - start_time;
+			if (time_difference < 0)
+				time_difference += 1000000000;				//(Rolls over every 1 second)
+			if (time_difference > (READ_TIMEOUT_US * 1000))		//Delay for # nS
+				return false;
+		}
+	}
+	return true;
+}
+
+bool skip_read(int skip)
+{
+	uint8_t buf[128];
+	int skipped = 0;
+	while(skipped < skip)
+	{
+		int cur_skip = skip - skipped;
+		if(cur_skip > 128)
+		{
+			cur_skip = 128;
+		}
+		//printf("\nSkippppp %d\n", cur_skip);
+		bool is_readed = my_read(client_to_server, buf, cur_skip);
+		if(!is_readed)
+		{
+			printf("Error in skipping!\n");
+			return false;
+		}
+		skipped += cur_skip;
+	}
+	return true;
+}
+
+void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
+{
+	//printf("Swow part left = %u, top = %u, width = %u, height = %u\n\n",
+	//	left, top, width, height);
+	if(left + width > LCD_WIDTH || top + height > LCD_HEIGHT)
+	{
+		printf("Error show part! Wrong size!\n");
+		return;
+	}
+	 
+	 
+	 
+	/*printf("First line: \n");
+	for(int i = 0; i < SCREEN_BUF_LINE_LEN; i++)
+	{
+		printf("%02X ", screen_buffer[i]);
+	}
+	printf("\n");*/
+	lcd_setframe(left, top, width, height);
+//	uint16_t rowbytes = (width * 3);
+
+	for(uint16_t p = top; p < height; p++) {
+		// p = relative page address (y)
+		int cur_line_start = p * SCREEN_BUF_LINE_LEN ;
+		for (uint16_t c = left; c < width; c++) {
+			int cur_pos = cur_line_start + c * 3;
+			// c = relative column address (x)
+			//fread(buf, 3, 1, f);
+
+			// B buf[0]
+			// G buf[1]
+			// R buf[2]
+			// 18bit color mode
+			lcd_colorRGB(screen_buffer[cur_pos + 2], screen_buffer[cur_pos + 1], screen_buffer[cur_pos]);
+		}
+	}
+}
+
+void receive_bmp_file(uint8_t byte2, uint8_t byte3)
+{
+	uint8_t buf[30];
+	uint32_t isize = 0, ioffset, iwidth, iheight, ibpp, /*fpos,*/ rowbytes;
+	uint16_t show_width, show_height;
+	buf[2] = byte2;
+	buf[3] = byte3;
+	uint8_t rrr = sizeof(buf) - 4;
+	bool is_readed = my_read(client_to_server, &buf[4], rrr);
+	if(!is_readed)
+	{
+		printf("Error reading bmp!\n");
+		return;
+	}
+	
+	isize =	 	READ_32(buf, 2);
+	ioffset = 	READ_32(buf, 0x0A);
+	iwidth =	READ_32(buf, 0x12);
+	iheight = 	READ_32(buf, 0x16);
+	ibpp =		READ_16(buf, 0x1C);
+	printf("\n\n");
+	printf("File Size: %lu\nOffset: %lu\nWidth: %lu\nHeight: %lu\nBPP: %lu\n\n",isize,ioffset,iwidth,iheight,ibpp);
+	
+	uint16_t skip_bytes = ioffset - sizeof(buf);
+	//printf("Skip %u bites before start offset\n", skip_bytes);
+	if(!skip_read(skip_bytes))		
+	{
+		printf("Error reading BMP skip!\n");
+		return;
+	}
+	
+	show_width = iwidth;
+	if(show_width > LCD_WIDTH)
+		show_width = LCD_WIDTH;
+		
+	show_height = iheight;
+	if(show_height > LCD_HEIGHT)
+		show_height = LCD_HEIGHT;
+	
+	uint8_t d = (iwidth * 3) % 4;
+	rowbytes = (iwidth * 3);
+	// needed bytes in line
+	int read_line_len = rowbytes;
+	if(d > 0)
+	{
+		rowbytes += 4 - d;
+	}
+	
+	int start_bottom_row = LCD_HEIGHT - 1;
+	if(iheight > LCD_HEIGHT)
+	{
+		// Skip bottom lines
+		for(uint16_t p = 0; p < iheight - LCD_HEIGHT; p++)
+		{
+			if(!skip_read(rowbytes))		
+			{
+				printf("Error reading BMP!\n");
+				return;
+			}
+		} 
+		iheight = LCD_HEIGHT;
+	}
+	
+	if(iheight < LCD_HEIGHT)
+	{
+		start_bottom_row -= LCD_HEIGHT - iheight;
+	}
+	
+	int pos_in_local_buf;
+	// skip not needed bytes in line
+	int tail = rowbytes - SCREEN_BUF_LINE_LEN;
+	// if rowbytes < SCREEN_BUF_LINE_LEN
+	if(tail < 0)
+	{
+		tail = d;
+	}
+	else
+	{
+		read_line_len = SCREEN_BUF_LINE_LEN;
+		
+	}
+	
+	//printf("read_line_len = %d, rowbytes = %lu\n", read_line_len, rowbytes);
+	//printf("reading line: ");
+	for (uint16_t p = 0; p < iheight; p++) 
+	{
+		pos_in_local_buf = (start_bottom_row - p) * SCREEN_BUF_LINE_LEN;
+		//printf("l: %u (pos: %d), ", p, pos_in_local_buf);
+		
+		
+		
+		is_readed = my_read(client_to_server, &screen_buffer[pos_in_local_buf], read_line_len);
+		if(!is_readed)
+		{
+			printf("\nError reading BMP 11!\n");
+
+			return;
+		}
+		
+		
+		/*if(p == 0)
+		{
+			printf("First read line: \n");
+			for(int i = 0; i < SCREEN_BUF_LINE_LEN; i++)
+			{
+				printf("%02X ", screen_buffer[pos_in_local_buf + i]);
+			}
+			printf("\n");
+		}*/
+		
+		
+		//screen_buffer[pos_in_local_buf]  		= screen_buffer[pos_in_local_buf + 3] = 0;
+		//screen_buffer[pos_in_local_buf + 1] 	= screen_buffer[pos_in_local_buf + 4] = 0;
+		//screen_buffer[pos_in_local_buf + 2] 	= screen_buffer[pos_in_local_buf + 5] = 0xff;
+		if(tail > 0)
+		{
+			if(!skip_read(tail))		
+			{
+				printf("\nError reading BMP!\n");
+				return;
+			}
+		}
+		/*// p = relative page address (y)
+		//fpos = ioffset+(p*rowbytes);
+		//fseek(f, fpos, SEEK_SET);
+		for (c=0;c<iwidth;c++) {
+			// c = relative column address (x)
+			fread(buf, 3, 1, f);
+
+			// B buf[0]
+			// G buf[1]
+			// R buf[2]
+			// 18bit color mode
+			lcd_colorRGB(buf[2], buf[1], buf[0]);
+		}*/
+	}
+	printf("\n");
+	show_part(0, 0, show_width, show_height);
+}
+
+void export_png()
+{
 }
 
 // return: true - exit
@@ -67,11 +308,27 @@ bool process_signature(uint8_t sig[])
 		return true;
 		close(client_to_server);
 	}
-	printf("Unknown signature! %s\n", sig);
-	memccpy(buf, sig, SIGNATURE_SIZE, 1);
-	int read_buf_pos = SIGNATURE_SIZE; 
+	// export PNG
+	if(compare_signature(sig, "expo"))
+	{
+		export_png();
+		return false;
+	}
+	//int read_buf_pos = 0;
+	if(compare_signature(sig, "BM"))
+	{
+		printf("BMP file detected!\n");
+		receive_bmp_file(sig[2], sig[3]);
+		//memccpy(buf, sig, SIGNATURE_SIZE, 1);
+		//read_buf_pos = SIGNATURE_SIZE; 
+		return false;
+	}
+	else
+	{
+		printf("Unknown signature! %s\n", sig);
+	}
 	uint16_t allRead = 0;
-	while (1)
+	/*while (1)
 	{
 	   
 		unsigned short readed = read(client_to_server, &buf[read_buf_pos], MYBUF);
@@ -86,16 +343,16 @@ bool process_signature(uint8_t sig[])
 		printf("Received: readed = %u last byte = 0x%2X\n", readed, buf[readed - 1]);
 		
 	  
-		if (strcmp("",buf)!=0)
+		/ *if (strcmp("",buf)!=0)
 		{
 			printf("Received: %s (len = %d)\n", buf, strlen(buf));
 			//printf("Sending back...\n");
 			//write(server_to_client,buf,BUFSIZ);
-		}
+		}* /
 
-		/* clean buf from any data */
+		// clean buf from any data 
 		memset(buf, 0, sizeof(buf));
-	}
+	}*/
 	printf("All Read %u bytes!\n", allRead);
 	return false;
 }

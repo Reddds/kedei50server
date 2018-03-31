@@ -349,11 +349,12 @@ void lcd_img(char *fname, uint16_t x, uint16_t y) {
 		fseek(f, 0L, SEEK_SET);
 		fread(buf, 30, 1, f);
 
-		isize =	 buf[2] + (buf[3]<<8) + (buf[4]<<16) + (buf[5]<<24);
-		ioffset = buf[10] + (buf[11]<<8) + (buf[12]<<16) + (buf[13]<<24);
-		iwidth =	buf[18] + (buf[19]<<8) + (buf[20]<<16) + (buf[21]<<24);
-		iheight = buf[22] + (buf[23]<<8) + (buf[24]<<16) + (buf[25]<<24);
-		ibpp =		buf[28] + (buf[29]<<8);
+		isize =	 	READ_32(buf, 2);
+		ioffset = 	READ_32(buf, 0x0A);
+		//structSize= READ_32(buf, 0x0E);
+		iwidth =	READ_32(buf, 0x12);
+		iheight = 	READ_32(buf, 0x16);
+		ibpp =		READ_16(buf, 0x1C);
 
 		printf("\n\n");
 		printf("File Size: %lu\nOffset: %lu\nWidth: %lu\nHeight: %lu\nBPP: %lu\n\n",isize,ioffset,iwidth,iheight,ibpp);

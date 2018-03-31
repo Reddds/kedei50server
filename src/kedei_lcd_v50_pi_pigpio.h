@@ -11,6 +11,9 @@
 #define true 1
 #define false 0
 
+#define READ_32(buf, offset) (buf[offset] + (buf[offset + 1] << 8) + (buf[offset + 2] << 16) + (buf[offset + 3] << 24))
+#define READ_16(buf, offset) (buf[offset] + (buf[offset + 1] << 8))
+
 enum lcd_rotations
 {
 	LCD_ROTATE_0,
@@ -24,5 +27,7 @@ int lcd_close(void);
 void lcd_img(char *fname, uint16_t x, uint16_t y);
 void lcd_fill(uint16_t col);
 void lcd_init(enum lcd_rotations rotation);
+void lcd_colorRGB(uint8_t r, uint8_t g, uint8_t b);
+void lcd_setframe(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 
 #endif
