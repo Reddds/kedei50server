@@ -7,6 +7,9 @@
 #define uint8_t unsigned char
 #define uint16_t unsigned int
 #define uint32_t unsigned long
+#define bool uint8_t
+#define true 1
+#define false 0
 
 enum lcd_rotations
 {

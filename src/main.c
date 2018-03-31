@@ -35,98 +35,141 @@
 #include "kedei_lcd_v50_pi_pigpio.h"
 
 #define MYBUF 4096
+// Size of signature
+#define SIGNATURE_SIZE 4
+// 24bit colors for speed
+#define SCREEN_BUFFER (LCD_WIDTH * LCD_HEIGHT * 3)
+
+int client_to_server;
+char buf[MYBUF];
+
+bool compare_signature(uint8_t sig[], char* val)
+{
+	int len = strlen(val);
+	if(len != SIGNATURE_SIZE)
+	{
+		printf("Error! compare signature with wrong len! Need: %d, found: %s (%d)\n", SIGNATURE_SIZE, val, len);
+		return false;
+	}
+	for(uint8_t i = 0; i < SIGNATURE_SIZE; i++)
+	{
+		if(sig[i] != val[i])
+			return false;
+	}
+	return true;
+}
+
+// return: true - exit
+bool process_signature(uint8_t sig[])
+{
+	if(compare_signature(sig, "exit"))
+	{
+		return true;
+		close(client_to_server);
+	}
+	printf("Unknown signature! %s\n", sig);
+	memccpy(buf, sig, SIGNATURE_SIZE, 1);
+	int read_buf_pos = SIGNATURE_SIZE; 
+	uint16_t allRead = 0;
+	while (1)
+	{
+	   
+		unsigned short readed = read(client_to_server, &buf[read_buf_pos], MYBUF);
+		read_buf_pos = 0;
+		allRead += readed;
+		if(readed == 0)
+		{
+			printf("Read 0 bytes!. Close!\n");
+			break;
+		}
+
+		printf("Received: readed = %u last byte = 0x%2X\n", readed, buf[readed - 1]);
+		
+	  
+		if (strcmp("",buf)!=0)
+		{
+			printf("Received: %s (len = %d)\n", buf, strlen(buf));
+			//printf("Sending back...\n");
+			//write(server_to_client,buf,BUFSIZ);
+		}
+
+		/* clean buf from any data */
+		memset(buf, 0, sizeof(buf));
+	}
+	printf("All Read %u bytes!\n", allRead);
+	return false;
+}
+
 
 int fifo_loop()
 {
-		printf("Server ON..............bufer = %d\n", MYBUF);
-   int client_to_server;
-   char *myfifo = "/tmp/client_to_server_fifo";
+	printf("Server ON..............bufer = %d\n", MYBUF);
+	char *client_to_server_name = "/tmp/kedei_lcd_in";
 
-   //int server_to_client;
-   char *myfifo2 = "/tmp/server_to_client_fifo";
+	//int server_to_client;
+	char *server_to_client_name = "/tmp/kedei_lcd_out";
 
-   char buf[MYBUF];
 
-   /* create the FIFO (named pipe) */
-	printf("Creating FIFO %s ...\n", myfifo);
-   if(mkfifo(myfifo, 0666) < 0)
-   {
-	   printf("Error creating FIFO %s\n", myfifo);
+	/* create the FIFO (named pipe) */
+	printf("Creating FIFO %s ...\n", client_to_server_name);
+	if(mkfifo(client_to_server_name, 0666) < 0)
+	{
+	   printf("Error creating FIFO %s\n", client_to_server_name);
 	   //return 1;
-   }
-	printf("Creating FIFO %s ...\n", myfifo2);
-   if(mkfifo(myfifo2, 0666) < 0)
-   {
-	   printf("Error creating FIFO %s\n", myfifo2);
+	}
+	printf("Creating FIFO %s ...\n", server_to_client_name);
+	if(mkfifo(server_to_client_name, 0666) < 0)
+	{
+	   printf("Error creating FIFO %s\n", server_to_client_name);
 	   //return 1;
-   }
+	}
 
-   /* open, read, and display the message from the FIFO */
+	/* open, read, and display the message from the FIFO */
 	
 	/*printf("Opening FIFO %s ...\n", myfifo2);
-   server_to_client = open(myfifo2, O_WRONLY | O_NONBLOCK);
-   if(server_to_client < 0)
-   {
+	server_to_client = open(myfifo2, O_WRONLY | O_NONBLOCK);
+	if(server_to_client < 0)
+	{
 	   printf("Error open FIFO %s\n", myfifo2);
 	   perror("open");
 	   return 1;
-   }*/
-
-   printf("Server ON.\n");
+	}*/
+	uint8_t signature[SIGNATURE_SIZE];
+	printf("Server ON.\n");
 	while(1)
 	{
-		printf("Opening FIFO %s ...\n", myfifo);
-	   client_to_server = open(myfifo, O_RDONLY);//
-	   if(client_to_server < 0)
-	   {
-		   printf("Error open FIFO %s\n", myfifo);
-		   return 1;
-	   }
-	   unsigned short allRead = 0;
-	   while (1)
-	   {
-		   
-		  unsigned short readed = read(client_to_server, buf, MYBUF);
-		  allRead += readed;
-		  if(readed == 0)
-		  {
-			  printf("Read 0 bytes!. Close!\n");
+		printf("Opening FIFO %s ...\n", client_to_server_name);
+		client_to_server = open(client_to_server_name, O_RDONLY);//
+		if(client_to_server < 0)
+		{
+			printf("Error open FIFO %s\n", client_to_server_name);
+			return 1;
+		}
+		unsigned short sig_readed = read(client_to_server, signature, SIGNATURE_SIZE);
+		if(sig_readed < SIGNATURE_SIZE)
+		{
+			printf("Error! Signature need at leadt %d bytes!\n", SIGNATURE_SIZE);
+			close(client_to_server);
+			continue;
+		}
+		if(process_signature(signature))
+		{
 			break;
-		  }
-
-			printf("Received: readed = %u last byte = 0x%2X\n", readed, buf[readed - 1]);
-		  if (strcmp("exit",buf)==0)
-		  {
-			 printf("Server OFF.\n");
-			 break;
-		  }
-		  
-		  else if (strcmp("",buf)!=0)
-		  {
-			 printf("Received: %s (len = %d)\n", buf, strlen(buf));
-			 //printf("Sending back...\n");
-			 //write(server_to_client,buf,BUFSIZ);
-		  }
-
-		  /* clean buf from any data */
-		  memset(buf, 0, sizeof(buf));
-	   }
-	   printf("All Read %u bytes!\n", allRead);
-	   close(client_to_server);
+		}
+		close(client_to_server);
+		
 	}
 
-   
+   printf("Server OFF.\n");
    //close(server_to_client);
 
-   unlink(myfifo);
-   unlink(myfifo2);
+   unlink(client_to_server_name);
+   unlink(server_to_client_name);
    return 0;
 }
 
 int main(int argc,char *argv[]) 
 {
-
-
 	uint8_t initRotation = 0;
 	int aflag = 0;
 	int bflag = 0;
