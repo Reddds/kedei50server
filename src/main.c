@@ -42,7 +42,7 @@
 // 24bit colors for speed
 // bytes in one line
 #define SCREEN_BUF_LINE_LEN LCD_WIDTH * 3
-#define SCREEN_BUFFER_LEN (LCD_WIDTH * SCREEN_BUF_LINE_LEN)
+#define SCREEN_BUFFER_LEN (LCD_HEIGHT * SCREEN_BUF_LINE_LEN)
 #define READ_TIMEOUT_US 200
 
 int client_to_server;
@@ -159,7 +159,7 @@ void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 
 void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 {
-	uint8_t buf[30];
+	uint8_t buf[32];
 	uint32_t isize = 0, ioffset, iwidth, iheight, ibpp, /*fpos,*/ rowbytes;
 	uint16_t show_width, show_height;
 	buf[2] = byte2;
@@ -245,8 +245,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	{
 		pos_in_local_buf = (start_bottom_row - p) * SCREEN_BUF_LINE_LEN;
 		//printf("l: %u (pos: %d), ", p, pos_in_local_buf);
-		
-		
+				
 		
 		is_readed = my_read(client_to_server, &screen_buffer[pos_in_local_buf], read_line_len);
 		if(!is_readed)
@@ -349,16 +348,11 @@ void export_png()
                  PNG_FILTER_TYPE_DEFAULT);
     /* Initialize rows of PNG. */
     
+    png_set_bgr(png_ptr);
+    
     row_pointers = png_malloc(png_ptr, LCD_HEIGHT * sizeof(png_byte *));
     for (y = 0; y < LCD_HEIGHT; ++y) {
-        //uint8_t *row = png_malloc(png_ptr, sizeof(uint8_t) * 3);
         row_pointers[y] = (png_byte *)(&screen_buffer[y * SCREEN_BUF_LINE_LEN]);
-        /*for (x = 0; x < bitmap->width; ++x) {
-            RGBPixel color = RGBPixelAtPoint(bitmap, x, y);
-            *row++ = color.red;
-            *row++ = color.green;
-            *row++ = color.blue;
-        }*/
     }
     
     /* Actually write the image data. */
@@ -393,8 +387,6 @@ bool process_signature(uint8_t sig[])
 	{
 		printf("BMP file detected!\n");
 		receive_bmp_file(sig[2], sig[3]);
-		//memccpy(buf, sig, SIGNATURE_SIZE, 1);
-		//read_buf_pos = SIGNATURE_SIZE; 
 		return false;
 	}
 	else
