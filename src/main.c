@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <ctype.h>
 #include <time.h>
+#include <png.h>
 
 #include "kedei_lcd_v50_pi_pigpio.h"
 
@@ -298,6 +299,79 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 
 void export_png()
 {
+	FILE * fp;
+	png_structp png_ptr = NULL;
+    png_infop info_ptr = NULL;
+    size_t y;
+    //png_uint_32 bytes_per_row;
+    png_byte **row_pointers = NULL;
+    
+	printf("Export screen to PNG '/tmp/export.png'...\n");
+	
+	fp = fopen ("/tmp/export.png", "wb");
+	if (! fp) 
+	{
+		perror("open");
+        return;
+    }
+    
+    /* Initialize the write struct. */
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (png_ptr == NULL) {
+        fclose(fp);
+        return;
+    }
+
+    /* Initialize the info struct. */
+    info_ptr = png_create_info_struct(png_ptr);
+    if (info_ptr == NULL) {
+        png_destroy_write_struct(&png_ptr, NULL);
+        fclose(fp);
+        return;
+    }
+
+    /* Set up error handling. */
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        fclose(fp);
+        return;
+    }
+    
+    /* Set image attributes. */
+    png_set_IHDR(png_ptr,
+                 info_ptr,
+                 LCD_WIDTH,
+                 LCD_HEIGHT,
+                 8,
+                 PNG_COLOR_TYPE_RGB,
+                 PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT,
+                 PNG_FILTER_TYPE_DEFAULT);
+    /* Initialize rows of PNG. */
+    
+    row_pointers = png_malloc(png_ptr, LCD_HEIGHT * sizeof(png_byte *));
+    for (y = 0; y < LCD_HEIGHT; ++y) {
+        //uint8_t *row = png_malloc(png_ptr, sizeof(uint8_t) * 3);
+        row_pointers[y] = (png_byte *)(&screen_buffer[y * SCREEN_BUF_LINE_LEN]);
+        /*for (x = 0; x < bitmap->width; ++x) {
+            RGBPixel color = RGBPixelAtPoint(bitmap, x, y);
+            *row++ = color.red;
+            *row++ = color.green;
+            *row++ = color.blue;
+        }*/
+    }
+    
+    /* Actually write the image data. */
+    png_init_io(png_ptr, fp);
+    png_set_rows(png_ptr, info_ptr, row_pointers);
+    png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+
+	png_free(png_ptr, row_pointers);
+	
+	/* Finish writing. */
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    fclose(fp);
+    printf("Export success\n");
 }
 
 // return: true - exit
