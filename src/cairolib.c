@@ -252,6 +252,11 @@ int cairo_test (cairo_t *cr)
     cairo_fill (cr);
 
     draw_bevels (cr, LCD_WIDTH, LCD_HEIGHT);
+    /*set_hex_color (cr, BLACK);
+    cairo_move_to (cr, 100, 100);
+	cairo_line_to (cr, 300, 300);
+	cairo_stroke (cr);*/
+
 
 	//printf("Cairo save image to bevels.png");
     //cairo_surface_write_to_png (surface, "bevels.png");
@@ -261,4 +266,13 @@ int cairo_test (cairo_t *cr)
     //cairo_surface_destroy (surface);
 
     return 0;
+}
+
+void cairo_line(cairo_t *cr, double stroke_width, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t r, uint8_t g, uint8_t b)
+{
+	cairo_set_source_rgb (cr, r / 255.0, g / 255.0, b / 255.0);
+    cairo_move_to (cr, x1, y1);
+	cairo_line_to (cr, x2, y2);
+	cairo_set_line_width(cr, stroke_width);
+	cairo_stroke (cr);
 }

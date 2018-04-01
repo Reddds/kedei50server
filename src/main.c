@@ -33,6 +33,7 @@
 #include <ctype.h>
 #include <time.h>
 #include <png.h>
+#include <inttypes.h>
 
 
 //cairo
@@ -43,7 +44,8 @@
 
 #include "kedei_lcd_v50_pi_pigpio.h"
 
-#define MYBUF 4096
+
+#define MYBUF 4000
 // Size of signature
 #define SIGNATURE_SIZE 4
 // 24bit colors for speed
@@ -54,7 +56,7 @@
 #define READ_TIMEOUT_US 200
 
 int client_to_server;
-//char buf[MYBUF];
+char input_buf[MYBUF];
 //unsigned char image[STRIDE * LCD_HEIGHT];
 uint8_t screen_buffer[SCREEN_BUFFER_LEN];
 
@@ -78,24 +80,25 @@ bool compare_signature(uint8_t sig[], char* val)
 }
 
 // read with timeout
-bool my_read(int fdesc, void *buf, int count)
+// read_count - real read
+bool my_read_count(int fdesc, void *buf, int count, int *read_count)
 {
-	unsigned short readed = 0;
+	*read_count = 0;
 	struct timespec gettime_now;
 	long int start_time;
 	long int time_difference;
 	clock_gettime(CLOCK_REALTIME, &gettime_now);
 	start_time = gettime_now.tv_nsec;
-	while(readed < count)
+	while(*read_count < count)
 	{
-		int cur_read = read(fdesc, buf, count - readed);
+		int cur_read = read(fdesc, buf, count - *read_count);
 		if(cur_read < 0)
 		{
 			perror("read");
 			return false;
 		}
-		readed += cur_read;
-		if(readed != count)
+		*read_count += cur_read;
+		if(*read_count != count)
 		{
 			clock_gettime(CLOCK_REALTIME, &gettime_now);
 			time_difference = gettime_now.tv_nsec - start_time;
@@ -105,7 +108,14 @@ bool my_read(int fdesc, void *buf, int count)
 				return false;
 		}
 	}
+	
 	return true;
+}
+
+bool my_read(int fdesc, void *buf, int count)
+{
+	int rcnt;
+	return my_read_count(fdesc, buf, count, &rcnt);
 }
 
 bool skip_read(int skip)
@@ -152,11 +162,11 @@ void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 	lcd_setframe(left, top, width, height);
 //	uint16_t rowbytes = (width * 3);
 
-	for(uint16_t p = top; p < height; p++) {
+	for(uint16_t p = 0; p < height; p++) {
 		// p = relative page address (y)
-		int cur_line_start = p * STRIDE;
-		for (uint16_t c = left; c < width; c++) {
-			int cur_pos = cur_line_start + c * 4;
+		int cur_line_start = (top + p) * STRIDE;
+		for (uint16_t c = 0; c < width; c++) {
+			int cur_pos = cur_line_start + (left + c) * 4;
 			// c = relative column address (x)
 			//fread(buf, 3, 1, f);
 
@@ -312,6 +322,9 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 
 void export_png()
 {
+	printf("Export screen to PNG '/tmp/export.png'...\n");
+	cairo_surface_write_to_png (surface, "/tmp/export.png");
+	printf("Export success\n");
 	/*FILE * fp;
 	png_structp png_ptr = NULL;
     png_infop info_ptr = NULL;
@@ -382,6 +395,122 @@ void export_png()
     printf("Export success\n");*/
 }
 
+// if max = 0 - unlimited
+uint get_uint(uint max, bool *is_error)
+{
+	char* endptr;
+	*is_error = false;
+	errno = 0;
+	char *pch = strtok (NULL, " ,.-");
+	uint val = strtoumax(pch, &endptr, 10);
+	if(errno != 0)
+	{
+		*is_error = true;
+		return 0;
+	}
+	if(max > 0 && val > max)
+	{
+		val = max;
+	}
+	return val;
+}
+
+// sample: line w 3 x1 100 y1 300 x2 200 y2 200 r 45 g 55 b 255
+// w - strike width
+// r, g, b - color, default - black
+void draw_line()
+{
+	uint16_t x1 = 0, x2 = 0, y1 = 0, y2 = 0, w = 1;
+	uint8_t r = 0, g = 0, b = 0;
+	
+	int rcnt;
+	my_read_count(client_to_server, input_buf, MYBUF - 1, &rcnt);
+	if(rcnt == 0)
+		return;
+	input_buf[rcnt] = 0;
+	bool is_error;
+	char *pch = strtok (input_buf, " ,.");
+	while (pch != NULL)
+	{
+		if(strcmp(pch, "w") == 0)
+		{
+			w = get_uint(0, &is_error);
+			if(is_error)
+				return;
+		}
+		else if(strcmp(pch, "x1") == 0)
+		{
+			x1 = get_uint(LCD_WIDTH - 1, &is_error);
+			if(is_error)
+				return;
+		}
+		else if(strcmp(pch, "y1") == 0)
+		{
+			y1 = get_uint(LCD_HEIGHT - 1, &is_error);
+			if(is_error)
+				return;
+		}
+		else if(strcmp(pch, "x2") == 0)
+		{
+			x2 = get_uint(LCD_WIDTH - 1, &is_error);
+			if(is_error)
+				return;
+		}
+		else if(strcmp(pch, "y2") == 0)
+		{
+			y2 = get_uint(LCD_HEIGHT - 1, &is_error);
+			if(is_error)
+				return;
+		}
+		else if(strcmp(pch, "r") == 0)
+		{
+			r = get_uint(255, &is_error);
+			if(is_error)
+				return;
+		}
+		else if(strcmp(pch, "g") == 0)
+		{
+			g = get_uint(255, &is_error);
+			if(is_error)
+				return;
+		}
+		else if(strcmp(pch, "b") == 0)
+		{
+			b = get_uint(255, &is_error);
+			if(is_error)
+				return;
+		}
+		pch = strtok (NULL, " ,.-");
+	}
+	printf("line w = %u, x1 = %u, y1 = %u, x2 = %u, y2 = %u, r = %u, g = %u, b = %u\n",
+		w, x1, y1, x2, y2, r, g, b);
+	cairo_line(cr, w, x1, y1, x2, y2, r, g, b);
+	uint16_t left, top, width, height;
+	if(x1 <= x2)
+	{
+		left = x1;
+		width = x2 - x1;
+	}
+	else
+	{
+		left = x2;
+		width = x1 - x2;
+	}
+	if(y1 <= y2)
+	{
+		top = y1;
+		height = y2 - y1;
+	}
+	else
+	{
+		top = y2;
+		height = y1 - y2;
+	}
+	printf("show part left = %u, top = %u, width = %u, height = %u\n", left, top, width, height);
+	show_part(left, top, width, height);
+//	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+}
+
 // return: true - exit
 bool process_signature(uint8_t sig[])
 {
@@ -394,6 +523,12 @@ bool process_signature(uint8_t sig[])
 	if(compare_signature(sig, "expo"))
 	{
 		export_png();
+		return false;
+	}
+	// Line 
+	if(compare_signature(sig, "line"))
+	{
+		draw_line();
 		return false;
 	}
 	//int read_buf_pos = 0;
