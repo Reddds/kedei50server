@@ -1,12 +1,14 @@
 #ifndef KEDEI_LCD_V50_PI_PIGPIO_H
 #define KEDEI_LCD_V50_PI_PIGPIO_H
 
+#include <stdint.h>
+
 #define LCD_WIDTH  480
 #define LCD_HEIGHT 320
 
-#define uint8_t unsigned char
-#define uint16_t unsigned int
-#define uint32_t unsigned long
+//#define uint8_t unsigned char
+//#define uint16_t unsigned int
+//#define uint32_t unsigned long
 #define bool uint8_t
 #define true 1
 #define false 0

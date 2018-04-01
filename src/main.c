@@ -34,6 +34,13 @@
 #include <time.h>
 #include <png.h>
 
+
+//cairo
+#include <cairo.h>
+#include <math.h>
+#include "cairolib.h"
+
+
 #include "kedei_lcd_v50_pi_pigpio.h"
 
 #define MYBUF 4096
@@ -41,13 +48,18 @@
 #define SIGNATURE_SIZE 4
 // 24bit colors for speed
 // bytes in one line
-#define SCREEN_BUF_LINE_LEN LCD_WIDTH * 3
-#define SCREEN_BUFFER_LEN (LCD_HEIGHT * SCREEN_BUF_LINE_LEN)
+//#define SCREEN_BUF_LINE_LEN LCD_WIDTH * 4
+#define STRIDE (LCD_WIDTH * 4)
+#define SCREEN_BUFFER_LEN (LCD_HEIGHT * STRIDE)
 #define READ_TIMEOUT_US 200
 
 int client_to_server;
 //char buf[MYBUF];
+//unsigned char image[STRIDE * LCD_HEIGHT];
 uint8_t screen_buffer[SCREEN_BUFFER_LEN];
+
+cairo_t *cr;
+cairo_surface_t *surface;
 
 bool compare_signature(uint8_t sig[], char* val)
 {
@@ -142,9 +154,9 @@ void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 
 	for(uint16_t p = top; p < height; p++) {
 		// p = relative page address (y)
-		int cur_line_start = p * SCREEN_BUF_LINE_LEN ;
+		int cur_line_start = p * STRIDE;
 		for (uint16_t c = left; c < width; c++) {
-			int cur_pos = cur_line_start + c * 3;
+			int cur_pos = cur_line_start + c * 4;
 			// c = relative column address (x)
 			//fread(buf, 3, 1, f);
 
@@ -159,8 +171,17 @@ void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 
 void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 {
+	/*FILE * fp;
+	fp = fopen ("/tmp/receive.bmp", "wb");
+	if (! fp) 
+	{
+		perror("open");
+        return;
+    }*/
+	
+	/*
 	uint8_t buf[32];
-	uint32_t isize = 0, ioffset, iwidth, iheight, ibpp, /*fpos,*/ rowbytes;
+	uint32_t isize = 0, ioffset, iwidth, iheight, ibpp, rowbytes;
 	uint16_t show_width, show_height;
 	buf[2] = byte2;
 	buf[3] = byte3;
@@ -178,7 +199,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	iheight = 	READ_32(buf, 0x16);
 	ibpp =		READ_16(buf, 0x1C);
 	printf("\n\n");
-	printf("File Size: %lu\nOffset: %lu\nWidth: %lu\nHeight: %lu\nBPP: %lu\n\n",isize,ioffset,iwidth,iheight,ibpp);
+	printf("File Size: %u\nOffset: %u\nWidth: %u\nHeight: %u\nBPP: %u\n\n",isize,ioffset,iwidth,iheight,ibpp);
 	
 	uint16_t skip_bytes = ioffset - sizeof(buf);
 	//printf("Skip %u bites before start offset\n", skip_bytes);
@@ -254,17 +275,9 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 
 			return;
 		}
+		//fwrite(&screen_buffer[pos_in_local_buf], 1, read_line_len, fp);
 		
 		
-		/*if(p == 0)
-		{
-			printf("First read line: \n");
-			for(int i = 0; i < SCREEN_BUF_LINE_LEN; i++)
-			{
-				printf("%02X ", screen_buffer[pos_in_local_buf + i]);
-			}
-			printf("\n");
-		}*/
 		
 		
 		//screen_buffer[pos_in_local_buf]  		= screen_buffer[pos_in_local_buf + 3] = 0;
@@ -278,7 +291,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 				return;
 			}
 		}
-		/*// p = relative page address (y)
+		/ * // p = relative page address (y)
 		//fpos = ioffset+(p*rowbytes);
 		//fseek(f, fpos, SEEK_SET);
 		for (c=0;c<iwidth;c++) {
@@ -290,15 +303,16 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 			// R buf[2]
 			// 18bit color mode
 			lcd_colorRGB(buf[2], buf[1], buf[0]);
-		}*/
+		}* /
 	}
+	//fclose(fp);
 	printf("\n");
-	show_part(0, 0, show_width, show_height);
+	show_part(0, 0, show_width, show_height);*/
 }
 
 void export_png()
 {
-	FILE * fp;
+	/*FILE * fp;
 	png_structp png_ptr = NULL;
     png_infop info_ptr = NULL;
     size_t y;
@@ -314,14 +328,14 @@ void export_png()
         return;
     }
     
-    /* Initialize the write struct. */
+    // Initialize the write struct. 
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (png_ptr == NULL) {
         fclose(fp);
         return;
     }
 
-    /* Initialize the info struct. */
+    // Initialize the info struct. 
     info_ptr = png_create_info_struct(png_ptr);
     if (info_ptr == NULL) {
         png_destroy_write_struct(&png_ptr, NULL);
@@ -329,14 +343,14 @@ void export_png()
         return;
     }
 
-    /* Set up error handling. */
+    // Set up error handling. 
     if (setjmp(png_jmpbuf(png_ptr))) {
         png_destroy_write_struct(&png_ptr, &info_ptr);
         fclose(fp);
         return;
     }
     
-    /* Set image attributes. */
+    // Set image attributes. 
     png_set_IHDR(png_ptr,
                  info_ptr,
                  LCD_WIDTH,
@@ -346,7 +360,7 @@ void export_png()
                  PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT,
                  PNG_FILTER_TYPE_DEFAULT);
-    /* Initialize rows of PNG. */
+    // Initialize rows of PNG. 
     
     png_set_bgr(png_ptr);
     
@@ -355,17 +369,17 @@ void export_png()
         row_pointers[y] = (png_byte *)(&screen_buffer[y * SCREEN_BUF_LINE_LEN]);
     }
     
-    /* Actually write the image data. */
+    // Actually write the image data. 
     png_init_io(png_ptr, fp);
     png_set_rows(png_ptr, info_ptr, row_pointers);
     png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
 
 	png_free(png_ptr, row_pointers);
 	
-	/* Finish writing. */
+	// Finish writing. 
     png_destroy_write_struct(&png_ptr, &info_ptr);
     fclose(fp);
-    printf("Export success\n");
+    printf("Export success\n");*/
 }
 
 // return: true - exit
@@ -493,6 +507,10 @@ int fifo_loop()
 
 int main(int argc,char *argv[]) 
 {
+	//cairo_test();
+	//return 0;
+	
+	
 	uint8_t initRotation = 0;
 	int aflag = 0;
 	int bflag = 0;
@@ -567,11 +585,24 @@ int main(int argc,char *argv[])
 	//delayms(3000);
 	lcd_init(initRotation);
 
-	printf ("Black LCD\n");
+	//printf ("Black LCD\n");
 	//delayms(3000);
-	lcd_fill(0); //black out the screen.
+	//lcd_fill(0); //black out the screen.
+	//hex_color_t BG_COLOR =  { 0xd4, 0xd0, 0xc8 };
 
-	if(bmpFile != NULL)
+    surface = cairo_image_surface_create_for_data (screen_buffer, CAIRO_FORMAT_RGB24,
+						   LCD_WIDTH, LCD_HEIGHT, STRIDE);
+    cr = cairo_create (surface);
+
+    //cairo_rectangle (cr, 0, 0, LCD_WIDTH, LCD_HEIGHT);
+    //set_hex_color (cr, BG_COLOR);
+    //cairo_fill (cr);
+
+	cairo_test (cr);
+	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+	fifo_loop();
+
+	/*if(bmpFile != NULL)
 	{
 		lcd_img(bmpFile, 0, 0);
 		
@@ -579,8 +610,13 @@ int main(int argc,char *argv[])
 		lcd_close();
 		
 		return 0;
-	}
+	}*/
+	cairo_destroy (cr);
 
+    cairo_surface_destroy (surface);
+    
+    lcd_close();
+    return 0;
 /*
 	// 24bit Bitmap only
 	lcd_img("kedei_lcd_v50_pi.bmp", 50, 5);
@@ -614,4 +650,6 @@ int main(int argc,char *argv[])
 	lcd_close();*/
 }
 
+
+// cairo
 

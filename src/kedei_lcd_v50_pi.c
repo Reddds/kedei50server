@@ -357,7 +357,7 @@ void lcd_img(char *fname, uint16_t x, uint16_t y) {
 		ibpp =		READ_16(buf, 0x1C);
 
 		printf("\n\n");
-		printf("File Size: %lu\nOffset: %lu\nWidth: %lu\nHeight: %lu\nBPP: %lu\n\n",isize,ioffset,iwidth,iheight,ibpp);
+		printf("File Size: %u\nOffset: %u\nWidth: %u\nHeight: %u\nBPP: %u\n\n",isize,ioffset,iwidth,iheight,ibpp);
 
 		lcd_setframe(x,y,iwidth,iheight); //set the active frame...
 		uint8_t d = (iwidth * 3) % 4;
