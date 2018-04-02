@@ -60,6 +60,10 @@ char input_buf[MYBUF];
 //unsigned char image[STRIDE * LCD_HEIGHT];
 uint8_t screen_buffer[SCREEN_BUFFER_LEN];
 
+const char acOpen[]  = {"\"[<{"};
+const char acClose[] = {"\"]>}"};
+
+
 cairo_t *cr;
 cairo_surface_t *surface;
 
@@ -189,7 +193,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
         return;
     }*/
 	
-	/*
+	
 	uint8_t buf[32];
 	uint32_t isize = 0, ioffset, iwidth, iheight, ibpp, rowbytes;
 	uint16_t show_width, show_height;
@@ -230,7 +234,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	uint8_t d = (iwidth * 3) % 4;
 	rowbytes = (iwidth * 3);
 	// needed bytes in line
-	int read_line_len = rowbytes;
+	//int read_line_len = rowbytes;
 	if(d > 0)
 	{
 		rowbytes += 4 - d;
@@ -258,7 +262,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	
 	int pos_in_local_buf;
 	// skip not needed bytes in line
-	int tail = rowbytes - SCREEN_BUF_LINE_LEN;
+	int tail = rowbytes - LCD_WIDTH * 3;
 	// if rowbytes < SCREEN_BUF_LINE_LEN
 	if(tail < 0)
 	{
@@ -266,25 +270,25 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	}
 	else
 	{
-		read_line_len = SCREEN_BUF_LINE_LEN;
+		//read_line_len = LCD_WIDTH * 3;
 		
 	}
-	
+	printf("tile = %d, startPos = %d, start_bottom_row = %d", tail, start_bottom_row * STRIDE, start_bottom_row);
 	//printf("read_line_len = %d, rowbytes = %lu\n", read_line_len, rowbytes);
 	//printf("reading line: ");
 	for (uint16_t p = 0; p < iheight; p++) 
 	{
-		pos_in_local_buf = (start_bottom_row - p) * SCREEN_BUF_LINE_LEN;
+		pos_in_local_buf = (start_bottom_row - p) * STRIDE;
 		//printf("l: %u (pos: %d), ", p, pos_in_local_buf);
 				
 		
-		is_readed = my_read(client_to_server, &screen_buffer[pos_in_local_buf], read_line_len);
+		/*is_readed = my_read(client_to_server, &screen_buffer[pos_in_local_buf], read_line_len);
 		if(!is_readed)
 		{
 			printf("\nError reading BMP 11!\n");
 
 			return;
-		}
+		}*/
 		//fwrite(&screen_buffer[pos_in_local_buf], 1, read_line_len, fp);
 		
 		
@@ -293,6 +297,25 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 		//screen_buffer[pos_in_local_buf]  		= screen_buffer[pos_in_local_buf + 3] = 0;
 		//screen_buffer[pos_in_local_buf + 1] 	= screen_buffer[pos_in_local_buf + 4] = 0;
 		//screen_buffer[pos_in_local_buf + 2] 	= screen_buffer[pos_in_local_buf + 5] = 0xff;
+		
+		// p = relative page address (y)
+		//fpos = ioffset+(p*rowbytes);
+		//fseek(f, fpos, SEEK_SET);
+		for (uint16_t c = 0; c < show_width; c++) 
+		{
+			// c = relative column address (x)
+			read(client_to_server, input_buf, 3);
+
+			// B buf[0]
+			// G buf[1]
+			// R buf[2]
+			// 18bit color mode
+			screen_buffer[pos_in_local_buf++] = input_buf[2];
+			screen_buffer[pos_in_local_buf++] = input_buf[1];
+			screen_buffer[pos_in_local_buf++] = input_buf[0];
+			pos_in_local_buf++;
+			//lcd_colorRGB(buf[2], buf[1], buf[0]);
+		}
 		if(tail > 0)
 		{
 			if(!skip_read(tail))		
@@ -301,23 +324,10 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 				return;
 			}
 		}
-		/ * // p = relative page address (y)
-		//fpos = ioffset+(p*rowbytes);
-		//fseek(f, fpos, SEEK_SET);
-		for (c=0;c<iwidth;c++) {
-			// c = relative column address (x)
-			fread(buf, 3, 1, f);
-
-			// B buf[0]
-			// G buf[1]
-			// R buf[2]
-			// 18bit color mode
-			lcd_colorRGB(buf[2], buf[1], buf[0]);
-		}* /
 	}
 	//fclose(fp);
 	printf("\n");
-	show_part(0, 0, show_width, show_height);*/
+	show_part(0, 0, show_width, show_height);
 }
 
 void export_png()
@@ -395,13 +405,56 @@ void export_png()
     printf("Export success\n");*/
 }
 
+char *strmbtok ( char *input, char *delimit, const char *openblock, const char *closeblock) {
+    static char *token = NULL;
+    char *lead = NULL;
+    char *block = NULL;
+    int iBlock = 0;
+    int iBlockIndex = 0;
+
+    if ( input != NULL) {
+        token = input;
+        lead = input;
+    }
+    else {
+        lead = token;
+        if ( *token == '\0') {
+            lead = NULL;
+        }
+    }
+
+    while ( *token != '\0') {
+        if ( iBlock) {
+            if ( closeblock[iBlockIndex] == *token) {
+                iBlock = 0;
+            }
+            token++;
+            continue;
+        }
+        if ( ( block = strchr ( openblock, *token)) != NULL) {
+            iBlock = 1;
+            iBlockIndex = block - openblock;
+            token++;
+            continue;
+        }
+        if ( strchr ( delimit, *token) != NULL) {
+            *token = '\0';
+            token++;
+            break;
+        }
+        token++;
+    }
+    return lead;
+}
+
+
 // if max = 0 - unlimited
 uint get_uint(uint max, bool *is_error)
 {
 	char* endptr;
 	*is_error = false;
 	errno = 0;
-	char *pch = strtok (NULL, " ,.-");
+	char *pch = strmbtok (NULL, " ", acOpen, acClose);
 	uint val = strtoumax(pch, &endptr, 10);
 	if(errno != 0)
 	{
@@ -414,6 +467,42 @@ uint get_uint(uint max, bool *is_error)
 	}
 	return val;
 }
+/*
+// types: 0 - string, 10 - uint8_t, 11 - uint16_t, 20 - double
+void read_command_params(uint8_t cnt, char *params_name[], uint8_t params_type[], void *params_vals[])
+{
+	uint8_t ui8;
+	int rcnt;
+	my_read_count(client_to_server, input_buf, MYBUF - 1, &rcnt);
+	if(rcnt == 0)
+		return;
+	input_buf[rcnt] = 0;
+	bool is_error;
+	char *pch = strmbtok ( input_buf, " ", acOpen, acClose);
+	while (pch != NULL)
+	{
+		for(uint8_t i = 0; i < cnt; i++)
+		{
+			if(strcmp(pch, params_name[i]) != 0)
+				continue;
+			pch = strmbtok (NULL, " ", acOpen, acClose);
+			switch(params_type[i])
+			{
+				case 0:
+					params_vals[i] = pch;
+					
+					break;
+				case 10:
+					ui8 = get_uint(0, &is_error);
+					if(is_error)
+						return;
+					*params_vals[i] = ui8;
+					break;
+			}
+		}
+		pch = strmbtok (NULL, " ", acOpen, acClose);
+	}
+}*/
 
 // sample: line w 3 x1 100 y1 300 x2 200 y2 200 r 45 g 55 b 255
 // w - strike width
@@ -429,7 +518,7 @@ void draw_line()
 		return;
 	input_buf[rcnt] = 0;
 	bool is_error;
-	char *pch = strtok (input_buf, " ,.");
+	char *pch = strmbtok ( input_buf, " ", acOpen, acClose);
 	while (pch != NULL)
 	{
 		if(strcmp(pch, "w") == 0)
@@ -480,7 +569,7 @@ void draw_line()
 			if(is_error)
 				return;
 		}
-		pch = strtok (NULL, " ,.-");
+		pch = strmbtok (NULL, " ", acOpen, acClose);
 	}
 	printf("line w = %u, x1 = %u, y1 = %u, x2 = %u, y2 = %u, r = %u, g = %u, b = %u\n",
 		w, x1, y1, x2, y2, r, g, b);
@@ -511,6 +600,61 @@ void draw_line()
 //	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
 
+
+// sample: labl x 100 y 300 text "hello world" r 45 g 55 b 255
+// w - strike width
+// r, g, b - color, default - black
+void draw_label()
+{
+    
+	//uint16_t x1 = 0, x2 = 0, y1 = 0, y2 = 0, w = 1;
+	//uint8_t r = 0, g = 0, b = 0;
+	
+	int rcnt;
+	my_read_count(client_to_server, input_buf, MYBUF - 1, &rcnt);
+	if(rcnt == 0)
+		return;
+	input_buf[rcnt] = 0;
+	char *tok = strmbtok ( input_buf, " ", acOpen, acClose);
+    printf ( "%s\n", tok);
+    while ( ( tok = strmbtok ( NULL, " ", acOpen, acClose)) != NULL) {
+        printf ( "%s\n", tok);
+    }
+}
+
+// echo -e 'dlbl\x20\x00\x60\x00\x50\x00\x11\x12\x13\x05\x00Hello' > /tmp/kedei_lcd_in
+void draw_d_label()
+{
+	struct __attribute__((__packed__)) 
+	{
+		uint16_t font_size;
+		uint16_t x;
+		uint16_t y;
+		uint8_t r;
+		uint8_t g;
+		uint8_t b;
+		uint16_t text_len;
+	}d_label_data;
+	
+	int rcnt;
+	my_read_count(client_to_server, &d_label_data, sizeof(d_label_data), &rcnt);
+	if(rcnt == 0)
+		return;
+		
+	printf("struct size = %d readed = %d raw text_len = %u\n", sizeof(d_label_data), rcnt, d_label_data.text_len);
+	if(d_label_data.text_len > MYBUF - 1)
+		d_label_data.text_len = MYBUF - 1;
+	my_read_count(client_to_server, input_buf, d_label_data.text_len, &rcnt);
+	if(rcnt == 0)
+		return;
+	input_buf[d_label_data.text_len] = 0;
+	printf("font_size = %u, x = %u, y = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
+		d_label_data.font_size, d_label_data.x, d_label_data.y, d_label_data.r, d_label_data.g, d_label_data.b, d_label_data.text_len,
+		input_buf);	
+	control_label(cr, d_label_data.x, d_label_data.y, d_label_data.font_size, input_buf, d_label_data.r, d_label_data.g, d_label_data.b);
+	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+}
+
 // return: true - exit
 bool process_signature(uint8_t sig[])
 {
@@ -529,6 +673,17 @@ bool process_signature(uint8_t sig[])
 	if(compare_signature(sig, "line"))
 	{
 		draw_line();
+		return false;
+	}
+	// Label 
+	if(compare_signature(sig, "labl"))
+	{
+		draw_label();
+		return false;
+	}
+	if(compare_signature(sig, "dlbl"))
+	{
+		draw_d_label();
 		return false;
 	}
 	//int read_buf_pos = 0;

@@ -276,3 +276,14 @@ void cairo_line(cairo_t *cr, double stroke_width, uint16_t x1, uint16_t y1, uint
 	cairo_set_line_width(cr, stroke_width);
 	cairo_stroke (cr);
 }
+
+void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text, uint8_t r, uint8_t g, uint8_t b)
+{
+	cairo_set_source_rgb (cr, r / 255.0, g / 255.0, b / 255.0);
+	cairo_select_font_face (cr, "sans", 0, 0);
+	cairo_set_font_size (cr, size);
+	cairo_move_to (cr, x, y);
+    cairo_show_text (cr, text);
+	cairo_set_line_width (cr, 1.0);
+    cairo_stroke (cr);
+}
