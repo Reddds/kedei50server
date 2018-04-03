@@ -745,13 +745,64 @@ void draw_d_text_box()
 	text_box_data->g = d_text_box_data.g;
 	text_box_data->b = d_text_box_data.b;
 	
+	uint16_t slen = strlen(input_buf);
+	if(slen > 0)
+	{
+		text_box_data->text = malloc(slen + 1);
+		strcpy(text_box_data->text, input_buf);
+	}
+	else
+	{
+		text_box_data->text = NULL;
+	}
 	
 	add_control(d_text_box_data.id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
 }
 
+dk_control *find_control(uint16_t id)
+{
+	for(uint8_t i = 0; i <= last_control; i++)
+	{
+		if(dk_controls[i].id == id)
+			return &dk_controls[i];
+	}
+	return NULL;
+}
+
+//              id     
+// echo -e 'dstx\x01\x00\x05\x00World' > /tmp/kedei_lcd_in
 void d_set_text()
 {
+	printf("set text");
+	struct __attribute__((__packed__))
+	{
+		uint16_t id;
+		uint16_t text_len;
+	}d_set_text_data;
 	
+	int rcnt;
+	my_read_count(client_to_server, &d_set_text_data, sizeof(d_set_text_data), &rcnt);
+	if(rcnt == 0)
+		return;
+	if(d_set_text_data.text_len > 0)
+	{
+		if(d_set_text_data.text_len > MYBUF - 1)
+			d_set_text_data.text_len = MYBUF - 1;
+		my_read_count(client_to_server, input_buf, d_set_text_data.text_len, &rcnt);
+		if(rcnt == 0)
+			return;
+		input_buf[d_set_text_data.text_len] = 0;
+	}
+	
+	
+	dk_control *control = find_control(d_set_text_data.id);
+	if(control == NULL)
+	{
+		printf("control not found!");
+		return;
+	}
+	set_text(cr, control, input_buf);
+	show_part(control->left, control->top, control->right - control->left, control->bottom - control->top);
 }
 	
 // return: true - exit

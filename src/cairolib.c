@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <cairo.h>
 #include <math.h>
+#include <string.h>
+#include <stdlib.h>
 
 #include "kedei_lcd_v50_pi_pigpio.h"
 #include "cairolib.h"
@@ -291,6 +293,7 @@ void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text,
 void draw_text_box(cairo_t *cr, dk_control *control)
 {
 	//cairo_text_extents_t extents;
+	cairo_save (cr);
 	
 	printf("cairo draw_text_box left = %u, top = %u, right = %u, bottom = %u\n",
 		control->left, control->top, control->right, control->bottom);
@@ -317,9 +320,13 @@ void draw_text_box(cairo_t *cr, dk_control *control)
 	}
 	
 	cairo_move_to (cr, control->left + 3, top_pos);
-	cairo_show_text (cr, "Helloween");
-	cairo_set_line_width (cr, 1.0);
-    cairo_stroke (cr);
+	if(((struct text_box_data_tag *)control->control_data)->text != NULL)
+	{
+		cairo_show_text (cr, ((struct text_box_data_tag *)control->control_data)->text);
+		cairo_set_line_width (cr, 1.0);
+		cairo_stroke (cr);
+    }
+    cairo_restore (cr);
 }
 
 void show_control(cairo_t *cr, dk_control *control)
@@ -357,4 +364,72 @@ void show_control(cairo_t *cr, dk_control *control)
 		case CT_FINGER_RADIO:
 			break;
 	}
+}
+
+void text_box_set_text(cairo_t *cr, dk_control *control, char *text)
+{
+	uint16_t slen = strlen(text);
+	if(((struct text_box_data_tag *)control->control_data)->text == NULL)
+	{
+		if(slen > 0)
+		{
+			((struct text_box_data_tag *)control->control_data)->text = malloc(slen);
+		}
+		else
+		{
+			return;
+		}
+	}
+	else
+	{
+		if(slen > 0)
+		{
+			((struct text_box_data_tag *)control->control_data)->text = (char *)realloc(((struct text_box_data_tag *)control->control_data)->text, slen);
+		}
+		else
+		{
+			((struct text_box_data_tag *)control->control_data)->text = NULL;
+		}
+	}
+	if(((struct text_box_data_tag *)control->control_data)->text != NULL)
+		strcpy(((struct text_box_data_tag *)control->control_data)->text, text);
+	draw_text_box(cr, control);
+}
+
+void set_text(cairo_t *cr, dk_control *control, char *text)
+{
+		switch(control->type)
+	{
+		case CT_LABEL:
+			break;
+		case CT_TEXT_BOX:
+			text_box_set_text(cr, control, text);
+			break;
+	
+		case CT_FINGER_TEXT_BOX:
+			break;
+	
+	
+		case CT_BUTTON:
+			break;
+		case CT_IMAGE_BUTTON:
+			break;
+	
+		case CT_FINGER_BUTTON:
+			break;
+		case CT_FINGER_IMAGE_BUTTON:
+			break;
+	
+	
+		case CT_CHECK_BOX:
+			break;
+		case CT_RADIO:
+			break;
+	
+		case CT_FINGER_CHECK_BOX:
+			break;
+		case CT_FINGER_RADIO:
+			break;
+	}
+
 }
