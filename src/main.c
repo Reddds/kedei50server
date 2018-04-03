@@ -358,74 +358,18 @@ void export_png()
 	printf("Export screen to PNG '/tmp/export.png'...\n");
 	cairo_surface_write_to_png (surface, "/tmp/export.png");
 	printf("Export success\n");
-	/*FILE * fp;
-	png_structp png_ptr = NULL;
-    png_infop info_ptr = NULL;
-    size_t y;
-    //png_uint_32 bytes_per_row;
-    png_byte **row_pointers = NULL;
-    
-	printf("Export screen to PNG '/tmp/export.png'...\n");
-	
-	fp = fopen ("/tmp/export.png", "wb");
-	if (! fp) 
+
+}
+
+
+dk_control *find_control(uint16_t id)
+{
+	for(uint8_t i = 0; i <= last_control; i++)
 	{
-		perror("open");
-        return;
-    }
-    
-    // Initialize the write struct. 
-    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (png_ptr == NULL) {
-        fclose(fp);
-        return;
-    }
-
-    // Initialize the info struct. 
-    info_ptr = png_create_info_struct(png_ptr);
-    if (info_ptr == NULL) {
-        png_destroy_write_struct(&png_ptr, NULL);
-        fclose(fp);
-        return;
-    }
-
-    // Set up error handling. 
-    if (setjmp(png_jmpbuf(png_ptr))) {
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        fclose(fp);
-        return;
-    }
-    
-    // Set image attributes. 
-    png_set_IHDR(png_ptr,
-                 info_ptr,
-                 LCD_WIDTH,
-                 LCD_HEIGHT,
-                 8,
-                 PNG_COLOR_TYPE_RGB,
-                 PNG_INTERLACE_NONE,
-                 PNG_COMPRESSION_TYPE_DEFAULT,
-                 PNG_FILTER_TYPE_DEFAULT);
-    // Initialize rows of PNG. 
-    
-    png_set_bgr(png_ptr);
-    
-    row_pointers = png_malloc(png_ptr, LCD_HEIGHT * sizeof(png_byte *));
-    for (y = 0; y < LCD_HEIGHT; ++y) {
-        row_pointers[y] = (png_byte *)(&screen_buffer[y * SCREEN_BUF_LINE_LEN]);
-    }
-    
-    // Actually write the image data. 
-    png_init_io(png_ptr, fp);
-    png_set_rows(png_ptr, info_ptr, row_pointers);
-    png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
-
-	png_free(png_ptr, row_pointers);
-	
-	// Finish writing. 
-    png_destroy_write_struct(&png_ptr, &info_ptr);
-    fclose(fp);
-    printf("Export success\n");*/
+		if(dk_controls[i].id == id)
+			return &dk_controls[i];
+	}
+	return NULL;
 }
 
 char *strmbtok ( char *input, char *delimit, const char *openblock, const char *closeblock) {
@@ -533,7 +477,8 @@ void read_command_params(uint8_t cnt, char *params_name[], uint8_t params_type[]
 void draw_line()
 {
 	uint16_t x1 = 0, x2 = 0, y1 = 0, y2 = 0, w = 1;
-	uint8_t r = 0, g = 0, b = 0;
+	//uint8_t r = 0, g = 0, b = 0;
+	hex_color_t color;
 	
 	int rcnt;
 	my_read_count(client_to_server, input_buf, MYBUF - 1, &rcnt);
@@ -576,27 +521,27 @@ void draw_line()
 		}
 		else if(strcmp(pch, "r") == 0)
 		{
-			r = get_uint(255, &is_error);
+			color.r = get_uint(255, &is_error);
 			if(is_error)
 				return;
 		}
 		else if(strcmp(pch, "g") == 0)
 		{
-			g = get_uint(255, &is_error);
+			color.g = get_uint(255, &is_error);
 			if(is_error)
 				return;
 		}
 		else if(strcmp(pch, "b") == 0)
 		{
-			b = get_uint(255, &is_error);
+			color.b = get_uint(255, &is_error);
 			if(is_error)
 				return;
 		}
 		pch = strmbtok (NULL, " ", acOpen, acClose);
 	}
 	printf("line w = %u, x1 = %u, y1 = %u, x2 = %u, y2 = %u, r = %u, g = %u, b = %u\n",
-		w, x1, y1, x2, y2, r, g, b);
-	cairo_line(cr, w, x1, y1, x2, y2, r, g, b);
+		w, x1, y1, x2, y2, color.r, color.g, color.b);
+	cairo_line(cr, w, x1, y1, x2, y2, color);
 	uint16_t left, top, width, height;
 	if(x1 <= x2)
 	{
@@ -645,7 +590,7 @@ void draw_label()
     }
 }
 
-// echo -e 'dlbl\x20\x00\x60\x00\x50\x00\x11\x12\x13\x05\x00Hello' > /tmp/kedei_lcd_in
+/*// echo -e 'dlbl\x20\x00\x60\x00\x50\x00\x11\x12\x13\x05\x00Hello' > /tmp/kedei_lcd_in
 void draw_d_label()
 {
 	struct __attribute__((__packed__)) 
@@ -676,14 +621,24 @@ void draw_d_label()
 		input_buf);	
 	control_label(cr, d_label_data.x, d_label_data.y, d_label_data.font_size, input_buf, d_label_data.r, d_label_data.g, d_label_data.b);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
-}
+}*/
 
 
-void add_control(uint16_t id, control_types type, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+bool add_control(uint16_t id, control_types type, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
 	void *control_data)
 {
 	if(last_control >= MAX_CONTROL)
-		return;
+	{
+		printf("Control limit!\n");
+		return false;
+	}
+	
+	if(find_control(id) != NULL)
+	{
+		printf("Control with id = %d already exist!\n", id);
+		return false;
+	}
+		
 	last_control++;
 	dk_controls[last_control].id = id;
 	dk_controls[last_control].type = type;
@@ -695,6 +650,69 @@ void add_control(uint16_t id, control_types type, uint16_t left, uint16_t top, u
 	
 	show_control(cr, &dk_controls[last_control]);
 	show_part(left, top, width, height);
+	return true;
+}
+
+//              id      fsize   x       y       width   height  r   g   b
+// echo -e 'dlbl\x02\x00\x20\x00\x60\x00\x80\x00\x60\x00\x24\x00\x11\x12\x80\x05\x00Logos' > /tmp/kedei_lcd_in
+void draw_d_label()
+{
+	printf("draw_d_text_box\n");
+	struct __attribute__((__packed__)) d_text_box_data_tag
+	{
+		uint16_t id;
+		uint16_t font_size;
+		uint16_t x;
+		uint16_t y;
+		uint16_t width;
+		uint16_t height;
+		uint8_t r;
+		uint8_t g;
+		uint8_t b;
+		uint16_t text_len;
+	}d_text_box_data;
+	
+	
+	
+	//struct __attribute__((__packed__)) d_text_box_data_tag *d_text_box_data = (struct __attribute__((__packed__)) d_text_box_data_tag*)malloc(sizeof(struct __attribute__((__packed__)) d_text_box_data_tag));
+	
+	int rcnt;
+	my_read_count(client_to_server, &d_text_box_data, sizeof(d_text_box_data), &rcnt);
+	if(rcnt == 0)
+		return;
+	if(d_text_box_data.text_len > 0)
+	{
+		if(d_text_box_data.text_len > MYBUF - 1)
+			d_text_box_data.text_len = MYBUF - 1;
+		my_read_count(client_to_server, input_buf, d_text_box_data.text_len, &rcnt);
+		if(rcnt == 0)
+			return;
+		input_buf[d_text_box_data.text_len] = 0;
+	}
+	
+	printf("id = %u, font_size = %u, x = %u, y = %u, width = %u, height = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
+		d_text_box_data.id, d_text_box_data.font_size, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, 
+		d_text_box_data.r, d_text_box_data.g, d_text_box_data.b, d_text_box_data.text_len,
+		input_buf);	
+	
+	struct label_data_tag *text_box_data = (struct label_data_tag*)malloc(sizeof(struct label_data_tag));
+	text_box_data->font_size = d_text_box_data.font_size;
+	text_box_data->color.r = d_text_box_data.r;
+	text_box_data->color.g = d_text_box_data.g;
+	text_box_data->color.b = d_text_box_data.b;
+	
+	uint16_t slen = strlen(input_buf);
+	if(slen > 0)
+	{
+		text_box_data->text = malloc(slen + 1);
+		strcpy(text_box_data->text, input_buf);
+	}
+	else
+	{
+		text_box_data->text = NULL;
+	}
+	
+	add_control(d_text_box_data.id, CT_LABEL, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
 }
 
 //              id      fsize   x       y       width   height  r   g   b
@@ -741,9 +759,9 @@ void draw_d_text_box()
 	
 	struct text_box_data_tag *text_box_data = (struct text_box_data_tag*)malloc(sizeof(struct text_box_data_tag));
 	text_box_data->font_size = d_text_box_data.font_size;
-	text_box_data->r = d_text_box_data.r;
-	text_box_data->g = d_text_box_data.g;
-	text_box_data->b = d_text_box_data.b;
+	text_box_data->color.r = d_text_box_data.r;
+	text_box_data->color.g = d_text_box_data.g;
+	text_box_data->color.b = d_text_box_data.b;
 	
 	uint16_t slen = strlen(input_buf);
 	if(slen > 0)
@@ -759,21 +777,12 @@ void draw_d_text_box()
 	add_control(d_text_box_data.id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
 }
 
-dk_control *find_control(uint16_t id)
-{
-	for(uint8_t i = 0; i <= last_control; i++)
-	{
-		if(dk_controls[i].id == id)
-			return &dk_controls[i];
-	}
-	return NULL;
-}
 
 //              id     
 // echo -e 'dstx\x01\x00\x05\x00World' > /tmp/kedei_lcd_in
 void d_set_text()
 {
-	printf("set text");
+	printf("set text\n");
 	struct __attribute__((__packed__))
 	{
 		uint16_t id;
@@ -784,6 +793,7 @@ void d_set_text()
 	my_read_count(client_to_server, &d_set_text_data, sizeof(d_set_text_data), &rcnt);
 	if(rcnt == 0)
 		return;
+	char *new_text = NULL;
 	if(d_set_text_data.text_len > 0)
 	{
 		if(d_set_text_data.text_len > MYBUF - 1)
@@ -792,6 +802,7 @@ void d_set_text()
 		if(rcnt == 0)
 			return;
 		input_buf[d_set_text_data.text_len] = 0;
+		new_text = input_buf;
 	}
 	
 	
@@ -801,7 +812,8 @@ void d_set_text()
 		printf("control not found!");
 		return;
 	}
-	set_text(cr, control, input_buf);
+	
+	set_text(cr, control, new_text);
 	show_part(control->left, control->top, control->right - control->left, control->bottom - control->top);
 }
 	

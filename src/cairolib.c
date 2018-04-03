@@ -7,17 +7,10 @@
 #include "kedei_lcd_v50_pi_pigpio.h"
 #include "cairolib.h"
 
-//#define WIDTH 480
-//#define HEIGHT 320
-//#define STRIDE (WIDTH * 4)
 
 
 
 
-typedef struct hex_color
-{
-    uint16_t r, g, b;
-} hex_color_t;
 
 hex_color_t BG_COLOR =  { 0xd4, 0xd0, 0xc8 };
 hex_color_t HI_COLOR_1 = { 0xff, 0xff, 0xff };
@@ -270,18 +263,18 @@ int cairo_test (cairo_t *cr)
     return 0;
 }
 
-void cairo_line(cairo_t *cr, double stroke_width, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t r, uint8_t g, uint8_t b)
+void cairo_line(cairo_t *cr, double stroke_width, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, hex_color_t color)
 {
-	cairo_set_source_rgb (cr, r / 255.0, g / 255.0, b / 255.0);
+	cairo_set_source_rgb (cr, color.r / 255.0, color.g / 255.0, color.b / 255.0);
     cairo_move_to (cr, x1, y1);
 	cairo_line_to (cr, x2, y2);
 	cairo_set_line_width(cr, stroke_width);
 	cairo_stroke (cr);
 }
 
-void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text, uint8_t r, uint8_t g, uint8_t b)
+void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text, hex_color_t color)
 {
-	cairo_set_source_rgb (cr, r / 255.0, g / 255.0, b / 255.0);
+	cairo_set_source_rgb (cr, color.r / 255.0, color.g / 255.0, color.b / 255.0);
 	cairo_select_font_face (cr, "sans", 0, 0);
 	cairo_set_font_size (cr, size);
 	cairo_move_to (cr, x, y);
@@ -290,42 +283,90 @@ void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text,
     cairo_stroke (cr);
 }
 
-void draw_text_box(cairo_t *cr, dk_control *control)
+void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+						hex_color_t color,
+						hex_color_t bg_color,
+						char *text)
+{
+	if(text == NULL)
+		return;
+
+	cairo_text_extents_t extents;
+		
+	cairo_save (cr);
+
+	cairo_rectangle (cr, left, top, width, height);
+	cairo_clip (cr);
+
+	cairo_rectangle (cr, left, top, width, height);
+	cairo_set_source_rgb (cr, 
+			bg_color.r / 255.0, 
+			bg_color.g / 255.0, 
+			bg_color.b / 255.0);
+
+	cairo_stroke_preserve(cr);
+	cairo_fill(cr);
+	
+	cairo_set_source_rgb (cr, 
+			color.r / 255.0, 
+			color.g / 255.0, 
+			color.b / 255.0);
+	cairo_select_font_face (cr, "sans", 0, 0);
+	cairo_set_font_size (cr, font_size);
+	cairo_text_extents (cr, "Wygitf", &extents);
+
+	printf("y_bearing = %f, height = %f", extents.y_bearing, extents.height);
+
+	double bot_ext = extents.height + extents.y_bearing;
+	double full_height = extents.height + bot_ext;
+	uint16_t top_pos = top + height - bot_ext;
+	if(full_height < height)
+	{
+		top_pos -= height / 2.0 - (full_height / 2);// + extents.y_bearing
+	}
+	
+	cairo_move_to (cr, left, top_pos);
+	cairo_show_text (cr, text);
+	cairo_set_line_width (cr, 1.0);
+	cairo_stroke (cr);
+
+	cairo_restore (cr);
+}
+
+void draw_dk_label(cairo_t *cr, dk_control *control)
+{
+	//cairo_text_extents_t extents;
+	cairo_save (cr);
+	
+	printf("cairo draw_label left = %u, top = %u, right = %u, bottom = %u\n",
+		control->left,  control->top, control->right, control->bottom);
+
+	draw_text_in_rect(cr, ((struct label_data_tag *)control->control_data)->font_size,
+				control->left, control->top,
+                 control->right - control->left, control->bottom - control->top,
+                 ((struct label_data_tag *)control->control_data)->color,
+                 BG_COLOR,
+                 ((struct label_data_tag *)control->control_data)->text);
+		
+    cairo_restore (cr);
+}
+
+void draw_dk_text_box(cairo_t *cr, dk_control *control)
 {
 	//cairo_text_extents_t extents;
 	cairo_save (cr);
 	
 	printf("cairo draw_text_box left = %u, top = %u, right = %u, bottom = %u\n",
-		control->left, control->top, control->right, control->bottom);
+		control->left,  control->top, control->right, control->bottom);
 	bevel_box (cr, control->left, control->top, control->right - control->left, control->bottom - control->top);
-	
-	cairo_rectangle (cr, control->left + 3, control->top + 3,
-                 control->right - control->left - 6, control->bottom - control->top - 6);
-	cairo_clip (cr);
-	cairo_set_source_rgb (cr, 
-			((struct text_box_data_tag *)control->control_data)->r / 255.0, 
-			((struct text_box_data_tag *)control->control_data)->g / 255.0, 
-			((struct text_box_data_tag *)control->control_data)->b / 255.0);
-	cairo_select_font_face (cr, "sans", 0, 0);
-	uint16_t font_size = ((struct text_box_data_tag *)control->control_data)->font_size;
-	cairo_set_font_size (cr, font_size);
-	//cairo_text_extents (cr, utf8, &extents);
-	
-	
-	uint16_t top_pos = control->bottom - 3;
-	uint16_t wiew_height = control->bottom - control->top - 6;
-	if(font_size < wiew_height)
-	{
-		top_pos -= wiew_height / 2.0 - font_size / 2.0;
-	}
-	
-	cairo_move_to (cr, control->left + 3, top_pos);
-	if(((struct text_box_data_tag *)control->control_data)->text != NULL)
-	{
-		cairo_show_text (cr, ((struct text_box_data_tag *)control->control_data)->text);
-		cairo_set_line_width (cr, 1.0);
-		cairo_stroke (cr);
-    }
+
+	draw_text_in_rect(cr, ((struct text_box_data_tag *)control->control_data)->font_size,
+				control->left + 3, control->top + 3,
+                 control->right - control->left - 6, control->bottom - control->top - 6,
+                 ((struct text_box_data_tag *)control->control_data)->color,
+                 HI_COLOR_1,
+                 ((struct text_box_data_tag *)control->control_data)->text);
+		
     cairo_restore (cr);
 }
 
@@ -334,9 +375,10 @@ void show_control(cairo_t *cr, dk_control *control)
 	switch(control->type)
 	{
 		case CT_LABEL:
+			draw_dk_label(cr, control);
 			break;
 		case CT_TEXT_BOX:
-			draw_text_box(cr, control);
+			draw_dk_text_box(cr, control);
 			break;
 	
 		case CT_FINGER_TEXT_BOX:
@@ -366,34 +408,52 @@ void show_control(cairo_t *cr, dk_control *control)
 	}
 }
 
-void text_box_set_text(cairo_t *cr, dk_control *control, char *text)
+bool change_text(char *old, char *new)
 {
-	uint16_t slen = strlen(text);
-	if(((struct text_box_data_tag *)control->control_data)->text == NULL)
+	uint16_t slen = 0;
+	if(new != NULL)
+		slen = strlen(new);
+	if(old == NULL)
 	{
 		if(slen > 0)
 		{
-			((struct text_box_data_tag *)control->control_data)->text = malloc(slen);
+			old = malloc(slen);
 		}
 		else
 		{
-			return;
+			return false;
 		}
 	}
 	else
 	{
 		if(slen > 0)
 		{
-			((struct text_box_data_tag *)control->control_data)->text = (char *)realloc(((struct text_box_data_tag *)control->control_data)->text, slen);
+			old = (char *)realloc(old, slen);
 		}
 		else
 		{
-			((struct text_box_data_tag *)control->control_data)->text = NULL;
+			old = NULL;
 		}
 	}
-	if(((struct text_box_data_tag *)control->control_data)->text != NULL)
-		strcpy(((struct text_box_data_tag *)control->control_data)->text, text);
-	draw_text_box(cr, control);
+	if(old != NULL)
+		strcpy(old, new);
+	return true;
+}
+
+void label_set_text(cairo_t *cr, dk_control *control, char *text)
+{
+	if(change_text(((struct label_data_tag *)control->control_data)->text, text))
+	{
+		draw_dk_label(cr, control);
+	}
+}
+
+void text_box_set_text(cairo_t *cr, dk_control *control, char *text)
+{
+	if(change_text(((struct text_box_data_tag *)control->control_data)->text, text))
+	{
+		draw_dk_text_box(cr, control);
+	}
 }
 
 void set_text(cairo_t *cr, dk_control *control, char *text)
@@ -401,6 +461,7 @@ void set_text(cairo_t *cr, dk_control *control, char *text)
 		switch(control->type)
 	{
 		case CT_LABEL:
+			label_set_text(cr, control, text);
 			break;
 		case CT_TEXT_BOX:
 			text_box_set_text(cr, control, text);
