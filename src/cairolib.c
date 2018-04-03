@@ -287,3 +287,74 @@ void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text,
 	cairo_set_line_width (cr, 1.0);
     cairo_stroke (cr);
 }
+
+void draw_text_box(cairo_t *cr, dk_control *control)
+{
+	//cairo_text_extents_t extents;
+	
+	printf("cairo draw_text_box left = %u, top = %u, right = %u, bottom = %u\n",
+		control->left, control->top, control->right, control->bottom);
+	bevel_box (cr, control->left, control->top, control->right - control->left, control->bottom - control->top);
+	
+	cairo_rectangle (cr, control->left + 3, control->top + 3,
+                 control->right - control->left - 6, control->bottom - control->top - 6);
+	cairo_clip (cr);
+	cairo_set_source_rgb (cr, 
+			((struct text_box_data_tag *)control->control_data)->r / 255.0, 
+			((struct text_box_data_tag *)control->control_data)->g / 255.0, 
+			((struct text_box_data_tag *)control->control_data)->b / 255.0);
+	cairo_select_font_face (cr, "sans", 0, 0);
+	uint16_t font_size = ((struct text_box_data_tag *)control->control_data)->font_size;
+	cairo_set_font_size (cr, font_size);
+	//cairo_text_extents (cr, utf8, &extents);
+	
+	
+	uint16_t top_pos = control->bottom - 3;
+	uint16_t wiew_height = control->bottom - control->top - 6;
+	if(font_size < wiew_height)
+	{
+		top_pos -= wiew_height / 2.0 - font_size / 2.0;
+	}
+	
+	cairo_move_to (cr, control->left + 3, top_pos);
+	cairo_show_text (cr, "Helloween");
+	cairo_set_line_width (cr, 1.0);
+    cairo_stroke (cr);
+}
+
+void show_control(cairo_t *cr, dk_control *control)
+{
+	switch(control->type)
+	{
+		case CT_LABEL:
+			break;
+		case CT_TEXT_BOX:
+			draw_text_box(cr, control);
+			break;
+	
+		case CT_FINGER_TEXT_BOX:
+			break;
+	
+	
+		case CT_BUTTON:
+			break;
+		case CT_IMAGE_BUTTON:
+			break;
+	
+		case CT_FINGER_BUTTON:
+			break;
+		case CT_FINGER_IMAGE_BUTTON:
+			break;
+	
+	
+		case CT_CHECK_BOX:
+			break;
+		case CT_RADIO:
+			break;
+	
+		case CT_FINGER_CHECK_BOX:
+			break;
+		case CT_FINGER_RADIO:
+			break;
+	}
+}

@@ -63,6 +63,29 @@ uint8_t screen_buffer[SCREEN_BUFFER_LEN];
 const char acOpen[]  = {"\"[<{"};
 const char acClose[] = {"\"]>}"};
 
+#define MAX_CONTROL 256
+/*
+ * Types:
+ * 1 - label within rectangle
+ * 2 - text box
+ * 
+ * 102 - text box for finger
+ * 
+ * 10 - button
+ * 11 - image button
+ * 
+ * 110 - button for finger
+ * 111 - image button for finger
+ * 
+ * 20 - check box
+ * 25 - radio button
+ * 
+ * 120 - check box for finger
+ * 125 - radio button for finger
+ * */
+dk_control dk_controls[MAX_CONTROL];
+
+int last_control = -1;
 
 cairo_t *cr;
 cairo_surface_t *surface;
@@ -655,6 +678,82 @@ void draw_d_label()
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
 
+
+void add_control(uint16_t id, control_types type, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+	void *control_data)
+{
+	if(last_control >= MAX_CONTROL)
+		return;
+	last_control++;
+	dk_controls[last_control].id = id;
+	dk_controls[last_control].type = type;
+	dk_controls[last_control].left = left;
+	dk_controls[last_control].top = top;
+	dk_controls[last_control].right = left + width;
+	dk_controls[last_control].bottom = top + height;
+	dk_controls[last_control].control_data = control_data;
+	
+	show_control(cr, &dk_controls[last_control]);
+	show_part(left, top, width, height);
+}
+
+//              id      fsize   x       y       width   height  r   g   b
+// echo -e 'dtbx\x01\x00\x20\x00\x60\x00\x50\x00\x60\x00\x24\x00\x11\x80\x13\x05\x00Hello' > /tmp/kedei_lcd_in
+void draw_d_text_box()
+{
+	printf("draw_d_text_box\n");
+	struct __attribute__((__packed__)) d_text_box_data_tag
+	{
+		uint16_t id;
+		uint16_t font_size;
+		uint16_t x;
+		uint16_t y;
+		uint16_t width;
+		uint16_t height;
+		uint8_t r;
+		uint8_t g;
+		uint8_t b;
+		uint16_t text_len;
+	}d_text_box_data;
+	
+	
+	
+	//struct __attribute__((__packed__)) d_text_box_data_tag *d_text_box_data = (struct __attribute__((__packed__)) d_text_box_data_tag*)malloc(sizeof(struct __attribute__((__packed__)) d_text_box_data_tag));
+	
+	int rcnt;
+	my_read_count(client_to_server, &d_text_box_data, sizeof(d_text_box_data), &rcnt);
+	if(rcnt == 0)
+		return;
+	if(d_text_box_data.text_len > 0)
+	{
+		if(d_text_box_data.text_len > MYBUF - 1)
+			d_text_box_data.text_len = MYBUF - 1;
+		my_read_count(client_to_server, input_buf, d_text_box_data.text_len, &rcnt);
+		if(rcnt == 0)
+			return;
+		input_buf[d_text_box_data.text_len] = 0;
+	}
+	
+	printf("id = %u, font_size = %u, x = %u, y = %u, width = %u, height = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
+		d_text_box_data.id, d_text_box_data.font_size, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, 
+		d_text_box_data.r, d_text_box_data.g, d_text_box_data.b, d_text_box_data.text_len,
+		input_buf);	
+	
+	struct text_box_data_tag *text_box_data = (struct text_box_data_tag*)malloc(sizeof(struct text_box_data_tag));
+	text_box_data->font_size = d_text_box_data.font_size;
+	text_box_data->r = d_text_box_data.r;
+	text_box_data->g = d_text_box_data.g;
+	text_box_data->b = d_text_box_data.b;
+	
+	
+	add_control(d_text_box_data.id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
+}
+
+void d_set_text()
+{
+	
+}
+	
 // return: true - exit
 bool process_signature(uint8_t sig[])
 {
@@ -686,6 +785,22 @@ bool process_signature(uint8_t sig[])
 		draw_d_label();
 		return false;
 	}
+	// text box
+	if(compare_signature(sig, "dtbx"))
+	{
+		draw_d_text_box();
+		return false;
+	}
+	
+	// commands
+	// set text
+	if(compare_signature(sig, "dstx"))
+	{
+		d_set_text();
+		return false;
+	}
+	
+	
 	//int read_buf_pos = 0;
 	if(compare_signature(sig, "BM"))
 	{
