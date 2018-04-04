@@ -315,7 +315,7 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 	cairo_set_font_size (cr, font_size);
 	cairo_text_extents (cr, "Wygitf", &extents);
 
-	printf("y_bearing = %f, height = %f", extents.y_bearing, extents.height);
+	//printf("y_bearing = %f, height = %f\n", extents.y_bearing, extents.height);
 
 	double bot_ext = extents.height + extents.y_bearing;
 	double full_height = extents.height + bot_ext;

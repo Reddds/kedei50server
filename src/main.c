@@ -1018,24 +1018,32 @@ int fifo_loop()
 	printf("Server ON.\n");
 	while(1)
 	{
-		printf("Opening FIFO %s ...\n", client_to_server_name);
+		printf("Opening FIFO %s adn waiting for clients ...\n", client_to_server_name);
 		client_to_server = open(client_to_server_name, O_RDONLY);//
 		if(client_to_server < 0)
 		{
 			printf("Error open FIFO %s\n", client_to_server_name);
 			return 1;
 		}
-		unsigned short sig_readed = read(client_to_server, signature, SIGNATURE_SIZE);
-		if(sig_readed < SIGNATURE_SIZE)
+		do
 		{
-			printf("Error! Signature need at leadt %d bytes!\n", SIGNATURE_SIZE);
-			close(client_to_server);
-			continue;
-		}
-		if(process_signature(signature))
-		{
-			break;
-		}
+			unsigned short sig_readed = read(client_to_server, signature, SIGNATURE_SIZE);
+			if(sig_readed == 0)
+			{
+				// Fifo closed
+				break;
+			}
+			if(sig_readed < SIGNATURE_SIZE)
+			{
+				printf("Error! Signature need at leadt %d bytes!\n", SIGNATURE_SIZE);
+				//close(client_to_server);
+				continue;
+			}
+			if(process_signature(signature))
+			{
+				break;
+			}
+		}while(true);
 		close(client_to_server);
 		
 	}

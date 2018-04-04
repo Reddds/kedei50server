@@ -13,6 +13,19 @@
 			"g": 128,
 			"b": 11,
 			"text": "Hello!"	
+		},
+		{
+			"type": "label",
+			"id": 2,
+			"fontSize": 22,
+			"x": 100,
+			"y": 90,
+			"width": 100,
+			"height": 36,
+			"r": 11,
+			"g": 12,
+			"b": 128,
+			"text": "Yahooy!"	
 		}
 	]
 }
