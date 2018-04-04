@@ -34,7 +34,8 @@
 #include <time.h>
 #include <png.h>
 #include <inttypes.h>
-
+#include <pthread.h>
+#include <time.h>
 
 //cairo
 #include <cairo.h>
@@ -89,6 +90,10 @@ int last_control = -1;
 
 cairo_t *cr;
 cairo_surface_t *surface;
+
+pthread_t tid[2];
+void* doTimeShow(void *arg);
+pthread_mutex_t lock_draw;
 
 bool compare_signature(uint8_t sig[], char* val)
 {
@@ -624,7 +629,7 @@ void draw_d_label()
 }*/
 
 
-bool add_control(uint16_t id, control_types type, uint16_t left, uint16_t top,
+dk_control *add_control(uint16_t id, control_types type, uint16_t left, uint16_t top,
 	uint16_t width, uint16_t height,
 	void *control_data)
 {
@@ -632,14 +637,14 @@ bool add_control(uint16_t id, control_types type, uint16_t left, uint16_t top,
 	{
 		printf("Control limit!\n");
 		free(control_data);
-		return false;
+		return NULL;
 	}
 	
 	if(find_control(id) != NULL)
 	{
 		printf("Control with id = %d already exist!\n", id);
 		free(control_data);
-		return false;
+		return NULL;
 	}
 		
 	last_control++;
@@ -653,7 +658,7 @@ bool add_control(uint16_t id, control_types type, uint16_t left, uint16_t top,
 	
 	show_control(cr, &dk_controls[last_control]);
 	show_part(left, top, width, height);
-	return true;
+	return &dk_controls[last_control];
 }
 
 //              id      fsize   x       y       width   height  r   g   b
@@ -1039,7 +1044,12 @@ int fifo_loop()
 				//close(client_to_server);
 				continue;
 			}
-			if(process_signature(signature))
+			bool prosess_res;
+			
+			pthread_mutex_lock(&lock_draw);
+			prosess_res = process_signature(signature);
+			pthread_mutex_unlock(&lock_draw);
+			if(prosess_res)
 			{
 				break;
 			}
@@ -1054,6 +1064,15 @@ int fifo_loop()
    unlink(client_to_server_name);
    unlink(server_to_client_name);
    return 0;
+}
+
+void create_time_thread(dk_control *time_control)
+{
+	int err = pthread_create(&(tid[0]), NULL, &doTimeShow, time_control);
+    if (err != 0)
+        printf("\ncan't create thread :[%s]", strerror(err));
+    else
+        printf("\n Thread created successfully\n");
 }
 
 int main(int argc,char *argv[]) 
@@ -1116,11 +1135,11 @@ int main(int argc,char *argv[])
         abort ();
       }
 
-  printf ("rotation = %d, aflag = %d, bflag = %d, cvalue = %s, bmpFile = %s \n",
+	printf ("rotation = %d, aflag = %d, bflag = %d, cvalue = %s, bmpFile = %s \n",
           initRotation, aflag, bflag, cvalue, bmpFile);
 
-  for (index = optind; index < argc; index++)
-    printf ("Non-option argument %s\n", argv[index]);
+	for (index = optind; index < argc; index++)
+		printf ("Non-option argument %s\n", argv[index]);
 
 
 
@@ -1151,6 +1170,37 @@ int main(int argc,char *argv[])
 
 	cairo_test (cr);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+
+
+
+
+	if (pthread_mutex_init(&lock_draw, NULL) != 0)
+    {
+        printf("\n mutex init failed\n");
+        return 1;
+    }
+	struct label_data_tag *text_box_data = (struct label_data_tag*)malloc(sizeof(struct label_data_tag));
+	text_box_data->font_size = 32;
+	text_box_data->color.r = 40;
+	text_box_data->color.g = 0;
+	text_box_data->color.b = 0;
+	text_box_data->text = NULL;// malloc(3);
+	//strcpy(text_box_data->text, "Gt");
+	//text_box_data->text[2] = 0;
+	
+	dk_control *time_control = add_control(255, CT_LABEL, 200, 200, 150, 36, text_box_data);
+	
+
+	create_time_thread(time_control);
+
+
+
+
+
+
+
+
+	
 	fifo_loop();
 
 	/*if(bmpFile != NULL)
@@ -1167,6 +1217,8 @@ int main(int argc,char *argv[])
     cairo_surface_destroy (surface);
     
     lcd_close();
+
+    pthread_mutex_destroy(&lock_draw);
     return 0;
 /*
 	// 24bit Bitmap only
@@ -1202,5 +1254,38 @@ int main(int argc,char *argv[])
 }
 
 
-// cairo
+// time thread
+void* doTimeShow(void *arg)
+{
+	dk_control *time_control = (dk_control *)arg;
+    unsigned long i = 0;
+    //pthread_t id = pthread_self();
+
+//    if(pthread_equal(id,tid[0]))
+//    {
+        printf("\n Time thread start. Control id = %u\n", time_control->id);
+//    }
+//    else
+//    {
+//        printf("\n Second thread processing\n");
+//    }
+	char buf[9];
+	buf[8] = 0;
+	while(true)
+	{
+		time_t t = time(NULL);
+		struct tm tm = *localtime(&t);
+		sprintf(buf, "%2d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
+		pthread_mutex_lock(&lock_draw);
+		printf("Cur time = %s\n", buf);
+		set_text(cr, time_control, buf);
+		show_part(time_control->left, time_control->top, time_control->right - time_control->left, time_control->bottom - time_control->top);
+		pthread_mutex_unlock(&lock_draw);
+		
+		sleep(1);
+		i++;
+	}
+	printf("Exit thread");
+    return NULL;
+}
 

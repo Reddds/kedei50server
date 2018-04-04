@@ -518,16 +518,16 @@ void show_control(cairo_t *cr, dk_control *control)
 	}
 }
 
-bool change_text(char *old, char *new)
+bool change_text(char **old, char *new)
 {
 	uint16_t slen = 0;
 	if(new != NULL)
 		slen = strlen(new);
-	if(old == NULL)
+	if(*old == NULL)
 	{
 		if(slen > 0)
 		{
-			old = malloc(slen);
+			*old = malloc(slen);
 		}
 		else
 		{
@@ -538,29 +538,32 @@ bool change_text(char *old, char *new)
 	{
 		if(slen > 0)
 		{
-			old = (char *)realloc(old, slen);
+			if(slen != strlen(*old))
+				*old = (char *)realloc(old, slen);
 		}
 		else
 		{
-			old = NULL;
+			*old = NULL;
 		}
 	}
-	if(old != NULL)
-		strcpy(old, new);
+	if(*old != NULL)
+		strcpy(*old, new);
 	return true;
 }
 
 void label_set_text(cairo_t *cr, dk_control *control, char *text)
 {
-	if(change_text(((struct label_data_tag *)control->control_data)->text, text))
+	printf("label_set_text\n");
+	if(change_text(&((struct label_data_tag *)control->control_data)->text, text))
 	{
+		printf("draw_dk_labeldraw_dk_label new text = %s\n", ((struct label_data_tag *)control->control_data)->text);
 		draw_dk_label(cr, control);
 	}
 }
 
 void text_box_set_text(cairo_t *cr, dk_control *control, char *text)
 {
-	if(change_text(((struct text_box_data_tag *)control->control_data)->text, text))
+	if(change_text(&((struct text_box_data_tag *)control->control_data)->text, text))
 	{
 		draw_dk_text_box(cr, control);
 	}
