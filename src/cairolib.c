@@ -398,8 +398,8 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 	//cairo_text_extents_t extents;
 	cairo_save (cr);
 	
-	printf("cairo draw_dk_image left = %u, top = %u, right = %u, bottom = %u\n",
-		control->left,  control->top, control->right, control->bottom);
+	//printf("cairo draw_dk_image left = %u, top = %u, right = %u, bottom = %u\n",
+	//	control->left,  control->top, control->right, control->bottom);
 
 	struct dk_image_data_tag *dk_image_data = control->control_data;
 	
@@ -408,13 +408,13 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
     closure.pos = 0;
     closure.max_size = dk_image_data->image_len;
 
-    printf("Closure: pos = %u, max_size = %u\n",
-		closure.pos, closure.max_size);
+    //printf("Closure: pos = %u, max_size = %u\n",
+	//	closure.pos, closure.max_size);
 
 	uint16_t width = control->right - control->left;
 	uint16_t height = control->bottom - control->top;
 
-	printf("Control width: %u, height: %u\n", width, height);
+	//printf("Control width: %u, height: %u\n", width, height);
 	
 	//cairo_rectangle (cr, control->left, control->top, width, height);
 	cairo_translate(cr, control->left, control->top);
@@ -426,7 +426,7 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 	double img_width = cairo_image_surface_get_width(image);
 	double img_height = cairo_image_surface_get_height(image);
 
-	printf("Image width = %f, height = %f\n", img_width, img_height);
+	//printf("Image width = %f, height = %f\n", img_width, img_height);
 
 	double scale_x = 1;// width / img_width;
 	double scale_y = 1;// height / img_height;
@@ -467,11 +467,11 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 	off_x = -(img_width * scale_x - width) / 2 / scale_x;
 	off_y = -(img_height * scale_y - height) / 2 / scale_y;
 
-	printf("Image scale_type = %u, scale_x = %f, scale_y = %f, off_x = %f, off_y = %f\n", dk_image_data->scale_type, scale_x, scale_y, off_x, off_y);
+	//printf("Image scale_type = %u, scale_x = %f, scale_y = %f, off_x = %f, off_y = %f\n", dk_image_data->scale_type, scale_x, scale_y, off_x, off_y);
 	cairo_scale (cr, scale_x, scale_y);
 	cairo_set_source_surface (cr, image, off_x, off_y);
 	cairo_paint (cr);
-		
+	cairo_surface_destroy(image);	
     cairo_restore (cr);
 }
 
