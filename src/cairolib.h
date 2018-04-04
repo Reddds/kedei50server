@@ -22,7 +22,11 @@ typedef struct hex_color
  * 25 - radio button
  * 
  * 120 - check box for finger
- * 125 - radio button for finger*/
+ * 125 - radio button for finger
+ *
+ *	50 - static image
+ *
+ * */
 typedef enum 
 {
 	CT_LABEL = 1,
@@ -42,7 +46,9 @@ typedef enum
 	CT_RADIO = 25,
 	
 	CT_FINGER_CHECK_BOX = 120,
-	CT_FINGER_RADIO = 125
+	CT_FINGER_RADIO = 125,
+
+	CT_STATIC_IMAGE = 50
 }control_types;
 
 typedef struct 
@@ -61,9 +67,6 @@ struct label_data_tag
 {
 	uint16_t font_size;
 	hex_color_t color;
-//	uint8_t r;
-//	uint8_t g;
-//	uint8_t b;
 	char *text;
 };
 
@@ -71,10 +74,15 @@ struct text_box_data_tag
 {
 	uint16_t font_size;
 	hex_color_t color;
-//	uint8_t r;
-//	uint8_t g;
-//	uint8_t b;
 	char *text;
+};
+
+struct dk_image_data_tag
+{
+	uint8_t image_type;
+	uint8_t scale_type;
+	uint32_t image_len;
+	uint8_t *image_data;
 };
 
 int cairo_test (cairo_t *cr);

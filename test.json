@@ -1,0 +1,18 @@
+{
+	"controls":
+	[
+		{
+			"type": "textBox",
+			"id": 1,
+			"fontSize": 32,
+			"x": 100,
+			"y": 50,
+			"width": 100,
+			"height": 36,
+			"r": 11,
+			"g": 128,
+			"b": 11,
+			"text": "Hello!"	
+		}
+	]
+}

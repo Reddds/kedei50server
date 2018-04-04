@@ -624,18 +624,21 @@ void draw_d_label()
 }*/
 
 
-bool add_control(uint16_t id, control_types type, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+bool add_control(uint16_t id, control_types type, uint16_t left, uint16_t top,
+	uint16_t width, uint16_t height,
 	void *control_data)
 {
 	if(last_control >= MAX_CONTROL)
 	{
 		printf("Control limit!\n");
+		free(control_data);
 		return false;
 	}
 	
 	if(find_control(id) != NULL)
 	{
 		printf("Control with id = %d already exist!\n", id);
+		free(control_data);
 		return false;
 	}
 		
@@ -816,6 +819,71 @@ void d_set_text()
 	set_text(cr, control, new_text);
 	show_part(control->left, control->top, control->right - control->left, control->bottom - control->top);
 }
+
+
+/*
+ * image_type:
+ * 	0 - png
+ *
+ * scale_type:
+ * 	0 - no scale
+ *  1 - fit width
+ *  2 - fit height
+ *	3 - fit all
+ * 	4 - sacle to show without empty fields
+ *  5 - no scale image center
+ * 	6 - no scale right top corner
+ * 	7 - no scale left bottom corner
+ * 	8 - no scale right bottom corner
+ * 	9 - no scale left center
+ * 	10 - no scale top center
+ * 	11 - no scale right center
+ * 	12 - no scale bottom center
+ */
+void d_image()
+{
+	printf("static image\n");
+	struct __attribute__((__packed__))
+	{
+		uint16_t id;
+		uint16_t x;
+		uint16_t y;
+		uint16_t width;
+		uint16_t height;
+		uint8_t image_type;
+		uint8_t scale_type;
+		uint32_t image_len;
+	}d_image_data;
+
+	int rcnt;
+	my_read_count(client_to_server, &d_image_data, sizeof(d_image_data), &rcnt);
+	if(rcnt == 0)
+		return;
+	uint8_t *image_src = NULL;
+	if(d_image_data.image_len > 0)
+	{
+		image_src = malloc(d_image_data.image_len);
+		if(image_src == NULL)
+			return;
+			
+		bool all_read = my_read_count(client_to_server, image_src, d_image_data.image_len, &rcnt);
+		if(rcnt == 0 || !all_read)
+			return;
+	}
+
+	struct dk_image_data_tag *dk_image_data = (struct dk_image_data_tag*)malloc(sizeof(struct dk_image_data_tag));
+	dk_image_data->image_type = d_image_data.image_type;
+	dk_image_data->scale_type = d_image_data.scale_type;
+	dk_image_data->image_len = d_image_data.image_len;
+	dk_image_data->image_data = image_src;
+
+	if(!add_control(d_image_data.id, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
+		d_image_data.width, d_image_data.height, dk_image_data))
+	{
+		free(image_src);
+	}		
+	
+}
 	
 // return: true - exit
 bool process_signature(uint8_t sig[])
@@ -860,6 +928,13 @@ bool process_signature(uint8_t sig[])
 	if(compare_signature(sig, "dstx"))
 	{
 		d_set_text();
+		return false;
+	}
+	
+	// show image
+	if(compare_signature(sig, "dimg"))
+	{
+		d_image();
 		return false;
 	}
 	

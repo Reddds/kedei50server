@@ -405,6 +405,9 @@ void show_control(cairo_t *cr, dk_control *control)
 			break;
 		case CT_FINGER_RADIO:
 			break;
+
+		case CT_STATIC_IMAGE:
+			break;
 	}
 }
 
@@ -490,6 +493,8 @@ void set_text(cairo_t *cr, dk_control *control, char *text)
 		case CT_FINGER_CHECK_BOX:
 			break;
 		case CT_FINGER_RADIO:
+			break;
+		case CT_STATIC_IMAGE:
 			break;
 	}
 
