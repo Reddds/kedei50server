@@ -428,12 +428,48 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 
 	printf("Image width = %f, height = %f\n", img_width, img_height);
 
-	double scale_x = width / img_width;
-	double scale_y = height / img_height;
+	double scale_x = 1;// width / img_width;
+	double scale_y = 1;// height / img_height;
 
-	printf("Image scale_x = %f, scale_y = %f\n", scale_x, scale_y);
+	double off_x = 0;
+	double off_y = 0;
+	switch(dk_image_data->scale_type)
+	{
+		case 1: //1 - fit width
+			scale_y = scale_x = width / img_width;
+			break;
+		case 2:// - fit height
+			scale_y = scale_x = height / img_height;
+			break;
+		case 3:// - fit on max dimension
+			scale_x = width / img_width;
+			scale_y = height / img_height;
+			if(scale_x > scale_y)
+				scale_y = scale_x;
+			else
+				scale_x = scale_y;
+			break;
+		case 4:// - fit on min dimension
+			scale_x = width / img_width;
+			scale_y = height / img_height;
+			if(scale_x < scale_y)
+				scale_y = scale_x;
+			else
+				scale_x = scale_y;
+			break;
+		case 5:// - stretch
+			scale_x = width / img_width;
+			scale_y = height / img_height;
+			break;
+	}
+
+	
+	off_x = -(img_width * scale_x - width) / 2 / scale_x;
+	off_y = -(img_height * scale_y - height) / 2 / scale_y;
+
+	printf("Image scale_type = %u, scale_x = %f, scale_y = %f, off_x = %f, off_y = %f\n", dk_image_data->scale_type, scale_x, scale_y, off_x, off_y);
 	cairo_scale (cr, scale_x, scale_y);
-	cairo_set_source_surface (cr, image, 0, 0);
+	cairo_set_source_surface (cr, image, off_x, off_y);
 	cairo_paint (cr);
 		
     cairo_restore (cr);

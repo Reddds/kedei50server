@@ -30,14 +30,69 @@
 		{
 			"type": "image",
 			"id": 10,
-			"fontSize": 22,
-			"x": 200,
-			"y": 90,
+			"x": 0,
+			"y": 0,
+			"width": 100,
+			"height": 100,
+			"imageType": 0,
+			"scaleType": 0,
+			"imageFile": "./testimg.png"	
+		},
+		{
+			"type": "image",
+			"id": 11,
+			"x": 110,
+			"y": 0,
 			"width": 100,
 			"height": 100,
 			"imageType": 0,
 			"scaleType": 1,
 			"imageFile": "./testimg.png"	
+		},
+		{
+			"type": "image",
+			"id": 12,
+			"x": 220,
+			"y": 0,
+			"width": 100,
+			"height": 100,
+			"imageType": 0,
+			"scaleType": 2,
+			"imageFile": "./testimg.png"	
+		},
+		{
+			"type": "image",
+			"id": 13,
+			"x": 330,
+			"y": 0,
+			"width": 100,
+			"height": 100,
+			"imageType": 0,
+			"scaleType": 3,
+			"imageFile": "./testimg.png"	
+		},
+		{
+			"type": "image",
+			"id": 14,
+			"x": 0,
+			"y": 110,
+			"width": 100,
+			"height": 100,
+			"imageType": 0,
+			"scaleType": 4,
+			"imageFile": "./testimg.png"	
+		},
+		{
+			"type": "image",
+			"id": 15,
+			"x": 110,
+			"y": 110,
+			"width": 100,
+			"height": 100,
+			"imageType": 0,
+			"scaleType": 5,
+			"imageFile": "./testimg.png"	
 		}
+		
 	]
 }

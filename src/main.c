@@ -829,16 +829,10 @@ void d_set_text()
  * 	0 - no scale
  *  1 - fit width
  *  2 - fit height
- *	3 - fit all
- * 	4 - sacle to show without empty fields
- *  5 - no scale image center
- * 	6 - no scale right top corner
- * 	7 - no scale left bottom corner
- * 	8 - no scale right bottom corner
- * 	9 - no scale left center
- * 	10 - no scale top center
- * 	11 - no scale right center
- * 	12 - no scale bottom center
+ *	3 - fit on max dimension
+ * 	4 - fit on min dimension
+ *  5 - stretch
+
  */
 void draw_d_image()
 {
@@ -888,7 +882,7 @@ void draw_d_image()
 		free(image_src);
 	}		
 	
-	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+	//show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
 	
 // return: true - exit
