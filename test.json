@@ -26,6 +26,18 @@
 			"g": 12,
 			"b": 128,
 			"text": "Yahooy!"	
+		},
+		{
+			"type": "image",
+			"id": 10,
+			"fontSize": 22,
+			"x": 200,
+			"y": 90,
+			"width": 100,
+			"height": 100,
+			"imageType": 0,
+			"scaleType": 1,
+			"imageFile": "./testimg.png"	
 		}
 	]
 }

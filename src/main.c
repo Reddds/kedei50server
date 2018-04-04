@@ -840,7 +840,7 @@ void d_set_text()
  * 	11 - no scale right center
  * 	12 - no scale bottom center
  */
-void d_image()
+void draw_d_image()
 {
 	printf("static image\n");
 	struct __attribute__((__packed__))
@@ -857,8 +857,12 @@ void d_image()
 
 	int rcnt;
 	my_read_count(client_to_server, &d_image_data, sizeof(d_image_data), &rcnt);
-	if(rcnt == 0)
+	if(rcnt < sizeof(d_image_data))
+	{
+		printf("Not need data! read: %d, need: %d\n", rcnt, sizeof(d_image_data));
 		return;
+	}
+	printf("Image size = %u\n", d_image_data.image_len);
 	uint8_t *image_src = NULL;
 	if(d_image_data.image_len > 0)
 	{
@@ -869,6 +873,7 @@ void d_image()
 		bool all_read = my_read_count(client_to_server, image_src, d_image_data.image_len, &rcnt);
 		if(rcnt == 0 || !all_read)
 			return;
+		printf("Read image success!\n");
 	}
 
 	struct dk_image_data_tag *dk_image_data = (struct dk_image_data_tag*)malloc(sizeof(struct dk_image_data_tag));
@@ -883,6 +888,7 @@ void d_image()
 		free(image_src);
 	}		
 	
+	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
 	
 // return: true - exit
@@ -934,7 +940,7 @@ bool process_signature(uint8_t sig[])
 	// show image
 	if(compare_signature(sig, "dimg"))
 	{
-		d_image();
+		draw_d_image();
 		return false;
 	}
 	

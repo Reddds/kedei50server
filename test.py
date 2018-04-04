@@ -1,4 +1,4 @@
-import argparse, json, struct
+import argparse, json, struct, os
 from pprint import pprint
 from struct import *
 parser = argparse.ArgumentParser()
@@ -29,5 +29,16 @@ for ctrl in data["controls"]:
 		binary_data = struct.pack("=HHHHHHBBBH", ctrl["id"], ctrl["fontSize"], ctrl["x"], ctrl["y"], ctrl["width"], ctrl["height"], ctrl["r"], ctrl["g"], ctrl["b"], slen)#, len(ctrl["text"])
 		fifo_write.write(binary_data)
 		fifo_write.write(bytearray(ctrl["text"], encoding="utf-8"))
+	elif ctrl["type"] == "image":
+		print("Image: ")
+		print(ctrl["imageFile"])
+		statinfo = os.stat(ctrl["imageFile"])
+		imglen = statinfo.st_size;
+		fifo_write.write(bytearray(b'dimg'))
+		binary_data = struct.pack("=HHHHHBBI", ctrl["id"], ctrl["x"], ctrl["y"], ctrl["width"], ctrl["height"], ctrl["imageType"], ctrl["scaleType"], imglen)
+		print(binary_data)
+		fifo_write.write(binary_data)
+		fimg = open(ctrl["imageFile"], "rb").read()
+		fifo_write.write(fimg)
 fifo_write.close()
 	

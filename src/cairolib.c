@@ -370,6 +370,76 @@ void draw_dk_text_box(cairo_t *cr, dk_control *control)
     cairo_restore (cr);
 }
 
+typedef struct
+{
+    uint8_t *data;
+    uint32_t max_size;
+    uint32_t pos;
+} png_stream_to_byte_array_closure_t;
+
+static cairo_status_t read_png_stream_from_byte_array (void *in_closure, uint8_t *data, unsigned int length)
+{
+    png_stream_to_byte_array_closure_t *closure =
+		(png_stream_to_byte_array_closure_t *) in_closure;
+
+    //log_message(STORE_LOGLVL_DEBUG, "ro_composite_tile: reading from byte array: pos: %i, length: %i", closure->pos, length);
+
+    if ((closure->pos + length) > (closure->max_size))
+        return CAIRO_STATUS_READ_ERROR;
+
+    memcpy (data, (closure->data + closure->pos), length);
+    closure->pos += length;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+void draw_dk_image(cairo_t *cr, dk_control *control)
+{
+	//cairo_text_extents_t extents;
+	cairo_save (cr);
+	
+	printf("cairo draw_dk_image left = %u, top = %u, right = %u, bottom = %u\n",
+		control->left,  control->top, control->right, control->bottom);
+
+	struct dk_image_data_tag *dk_image_data = control->control_data;
+	
+	png_stream_to_byte_array_closure_t closure;
+	closure.data = dk_image_data->image_data;
+    closure.pos = 0;
+    closure.max_size = dk_image_data->image_len;
+
+    printf("Closure: pos = %u, max_size = %u\n",
+		closure.pos, closure.max_size);
+
+	uint16_t width = control->right - control->left;
+	uint16_t height = control->bottom - control->top;
+
+	printf("Control width: %u, height: %u\n", width, height);
+	
+	//cairo_rectangle (cr, control->left, control->top, width, height);
+	cairo_translate(cr, control->left, control->top);
+	cairo_rectangle (cr, 0, 0, width, height);
+	cairo_clip (cr);
+	cairo_new_path (cr); /* path not consumed by clip()*/
+
+	cairo_surface_t *image = cairo_image_surface_create_from_png_stream(&read_png_stream_from_byte_array, &closure);
+	double img_width = cairo_image_surface_get_width(image);
+	double img_height = cairo_image_surface_get_height(image);
+
+	printf("Image width = %f, height = %f\n", img_width, img_height);
+
+	double scale_x = width / img_width;
+	double scale_y = height / img_height;
+
+	printf("Image scale_x = %f, scale_y = %f\n", scale_x, scale_y);
+	cairo_scale (cr, scale_x, scale_y);
+	cairo_set_source_surface (cr, image, 0, 0);
+	cairo_paint (cr);
+		
+    cairo_restore (cr);
+}
+
+
 void show_control(cairo_t *cr, dk_control *control)
 {
 	switch(control->type)
@@ -407,6 +477,7 @@ void show_control(cairo_t *cr, dk_control *control)
 			break;
 
 		case CT_STATIC_IMAGE:
+			draw_dk_image(cr, control);
 			break;
 	}
 }
