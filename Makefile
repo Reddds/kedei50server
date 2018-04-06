@@ -1,10 +1,10 @@
 CC=gcc
 BFLAGS=-Wall
-CFLAGS=-c -Wall
+CFLAGS=-c -Wall `pkg-config --cflags libconfig`
 BOUT=-o "./dist/lcdout"
 BFILES="./src/main.c" "./src/cairolib.c"
 BINCLUDE=-I/usr/include/cairo/
-BLINK=-lrt -lpng -lpthread `pkg-config --libs cairo libpng16`
+BLINK=-lrt -lpng -lpthread `pkg-config --libs cairo libpng16 libconfig`
 
 pigpio:
 	$(CC) $(BFLAGS) $(BOUT) "./src/kedei_lcd_v50_pi_pigpio.c" $(BFILES) $(BINCLUDE) -lpigpio $(BLINK)

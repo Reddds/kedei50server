@@ -74,6 +74,11 @@ uint16_t colors[16] = {
 volatile int spi_sensor_h;
 pthread_t sensor_thread_id;
 void* do_sensor_thread(void *arg);
+volatile int touch_raw_x = 0;
+volatile int touch_raw_y = 0;
+volatile int touch_offset_x = 0, touch_offset_y = 0;
+volatile double touch_scale_x = 1, touch_scale_y = 1;
+
 
 void delayms(int ms) {
 	//time_sleep(ms/1000.0);
@@ -588,8 +593,8 @@ int main(int argc,char *argv[])
 
 }
 */
-#define	chy 	0x90	//координатные оси дисплея и тачскрина поменяны местами(там где у дисплея Х у тачсрина Y)
-#define	chx 	0xD0	//за основу возьмём оси дисплея
+#define	chx 	0x90	//координатные оси дисплея и тачскрина поменяны местами(там где у дисплея Х у тачсрина Y)
+#define	chy 	0xD0	//за основу возьмём оси дисплея
 #define touch_z1 0xB8
 #define touch_z2 0xC8
 #define touch_sensitivity 245
@@ -644,8 +649,8 @@ void get_sensor_values()
 	{
 		return;
 	}
-	touch_x = (b1<< 5) | (b2 >> 3);
-	if(touch_x == 0)
+	touch_x = ((b1<< 5) | (b2 >> 3));
+	if(touch_x == 0 || touch_x == 4095)
 	{
 		skip_alerts++;
 		return;
@@ -659,12 +664,16 @@ void get_sensor_values()
 	}
 	touch_y = 4095 - ((b1<< 5) | (b2 >> 3)); //4095
 	
-	if(touch_y == 0)
+	if(touch_y == 0 || touch_y == 4095)
 	{
 		skip_alerts++;
 		return;
 	}
-	if(calibrate_min_x > touch_x)
+
+	touch_raw_x = touch_x;
+	touch_raw_y = touch_y;
+	
+	/*if(calibrate_min_x > touch_x)
 		calibrate_min_x = touch_x;
 	if(calibrate_max_x < touch_x)
 		calibrate_max_x = touch_x;
@@ -672,19 +681,24 @@ void get_sensor_values()
 	if(calibrate_min_y > touch_y)
 		calibrate_min_y = touch_y;
 	if(calibrate_max_y < touch_y)
-		calibrate_max_y = touch_y;
+		calibrate_max_y = touch_y;*/
+	double tx = (touch_x - touch_offset_x) * touch_scale_x;
+	double ty = (touch_y - touch_offset_y) * touch_scale_y;
 	/*printf("Receive X = %u Y = %u, || minX = %d maxX = %d | minY = %d maxY = %d || skip = %i\n",
 		touch_x, touch_y,
 		calibrate_min_x, calibrate_max_x, calibrate_min_y, calibrate_max_y,
 		skip_alerts);*/
-	printf("Receive X = %u Y = %u, skip = %i\n",
+	printf("Receive X = %u Y = %u, skip = %i, conv x = %f y = %f\n",
 		touch_x, touch_y,
-		skip_alerts);
+		skip_alerts,
+		tx, ty);
 
 	//printf("Receive Y = %u [%02X %02X %02X]\n", touch_y, buff_rx[0], buff_rx[1], buff_rx[2]);
 	skip_alerts = 0;
 }
-	
+
+volatile uint32_t last_tick = 0;
+#define TOUCH_INTERVAL_US 10000	
 void alert(int gpio, int level, uint32_t tick)
 {
 	if(level == PI_TIMEOUT)
@@ -695,80 +709,12 @@ void alert(int gpio, int level, uint32_t tick)
 	//printf("event detected for pin/ Level = %d\n", level);
 
 	// Off interrupt !!!!!
-	gpioSetAlertFunc(SENSOR_IRQ_PIN, NULL);
-	while(true)
+	
+	if(level == PI_LOW && (last_tick > tick || tick - last_tick > TOUCH_INTERVAL_US))
 	{
-		if(level == PI_LOW)
-		{
-			uint8_t b1, b2;
-			uint16_t touch_x = 0;
-			uint16_t touch_y = 0;
-			/*uint16_t touch_z1_val = 0;
-			uint16_t touch_z2_val = 0;
-
-			if(!get_touch_value(touch_z1, &b1, &b2))
-			{
-				return;
-			}
-			touch_z1_val = (b1 << 1) | (b2 >> 7);
-			if(!get_touch_value(touch_z2, &b1, &b2))
-			{
-				return;
-			}
-			touch_z2_val = (b1 << 1) | (b2 >> 7);
-			if(touch_z2_val - touch_z1_val < touch_sensitivity)
-				return;
-			*/
-			
-			if(!get_touch_value(chx, &b1, &b2))
-			{
-				break;
-			}
-			touch_x = (b1<< 5) | (b2 >> 3);
-			if(touch_x == 0)
-			{
-				skip_alerts++;
-				break;
-			}
-
-			usleep(100);
-			
-			if(!get_touch_value(chy, &b1, &b2))
-			{
-				break;
-			}
-			touch_y = 4095 - ((b1<< 5) | (b2 >> 3)); //4095
-			
-			if(touch_y == 0)
-			{
-				skip_alerts++;
-				break;
-			}
-			if(calibrate_min_x > touch_x)
-				calibrate_min_x = touch_x;
-			if(calibrate_max_x < touch_x)
-				calibrate_max_x = touch_x;
-				
-			if(calibrate_min_y > touch_y)
-				calibrate_min_y = touch_y;
-			if(calibrate_max_y < touch_y)
-				calibrate_max_y = touch_y;
-			/*printf("Receive X = %u Y = %u, || minX = %d maxX = %d | minY = %d maxY = %d || skip = %i\n",
-				touch_x, touch_y,
-				calibrate_min_x, calibrate_max_x, calibrate_min_y, calibrate_max_y,
-				skip_alerts);*/
-			printf("Receive X = %u Y = %u, skip = %i\n",
-				touch_x, touch_y,
-				skip_alerts);
-
-			//printf("Receive Y = %u [%02X %02X %02X]\n", touch_y, buff_rx[0], buff_rx[1], buff_rx[2]);
-			skip_alerts = 0;
-		}
-		break;
+		get_sensor_values();
+		last_tick = tick;
 	}
-	usleep(100);
-	// On interrupt !!!!!
-	gpioSetAlertFunc(SENSOR_IRQ_PIN, alert);
 }
 
 void create_sensor_thread()
@@ -794,17 +740,17 @@ void create_sensor_thread()
 	//gpioSetPullUpDown(SENSOR_IRQ_PIN, PI_PUD_UP);
 	/* monitor IR level changes */
 
-//	alert
-//!!!	gpioSetAlertFunc(SENSOR_IRQ_PIN, alert);
+	//	alert
+	gpioSetAlertFunc(SENSOR_IRQ_PIN, alert);
 	// 5ms max gap after last pulse 
-	//gpioSetWatchdog(SENSOR_IRQ_PIN, 200);
+	// gpioSetWatchdog(SENSOR_IRQ_PIN, 200);
 	
 	
-	int err = pthread_create(&sensor_thread_id, NULL, &do_sensor_thread, NULL);
+	/*int err = pthread_create(&sensor_thread_id, NULL, &do_sensor_thread, NULL);
     if (err != 0)
         printf("\ncan't create thread :[%s]", strerror(err));
     else
-        printf("\n Sensor thread created successfully\n");
+        printf("\n Sensor thread created successfully\n");*/
 }
 
 void* do_sensor_thread(void *arg)
@@ -815,7 +761,7 @@ void* do_sensor_thread(void *arg)
 	//gpioSetWatchdog(SENSOR_PIN, 5);
 	/* monitor IR level changes */
 	//gpioSetAlertFunc(SENSOR_PIN, alert);
-
+	return NULL;
 	while(true)
 	{
 		usleep(10000);
@@ -826,7 +772,7 @@ void* do_sensor_thread(void *arg)
 			continue;
 		pin_val = level;
 
-		if(level == PI_LOW)
+		if(false && level == PI_LOW)
 		{
 			get_sensor_values();
 		}

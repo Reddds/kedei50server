@@ -12,20 +12,37 @@
 
 
 
-hex_color_t BG_COLOR =  { 0xd4, 0xd0, 0xc8 };
-hex_color_t HI_COLOR_1 = { 0xff, 0xff, 0xff };
-hex_color_t HI_COLOR_2 = { 0xd4, 0xd0, 0xc8 };
-hex_color_t LO_COLOR_1 = { 0x80, 0x80, 0x80 };
-hex_color_t LO_COLOR_2 = { 0x40, 0x40, 0x40 };
-hex_color_t BLACK  = { 0, 0, 0 };
+//hex_color_t BG_COLOR =  { 0xd4, 0xd0, 0xc8 };
+//hex_color_t HI_COLOR_1 = { 0xff, 0xff, 0xff };
+//hex_color_t HI_COLOR_2 = { 0xd4, 0xd0, 0xc8 };
+//hex_color_t LO_COLOR_1 = { 0x80, 0x80, 0x80 };
+//hex_color_t LO_COLOR_2 = { 0x40, 0x40, 0x40 };
+//hex_color_t BLACK  = { 0, 0, 0 };
+
+hex_color_t std_colors[] =
+{
+	{ 0, 0, 0 },
+	{ 0xd4, 0xd0, 0xc8 },
+	{ 0xff, 0xff, 0xff },
+	{ 0xd4, 0xd0, 0xc8 },
+	{ 0x80, 0x80, 0x80 },
+	{ 0x40, 0x40, 0x40 }
+};
+
+hex_color_t *get_std_color(std_colors_t cid)
+{
+	return &std_colors[cid];
+}
 
 static void
-set_hex_color (cairo_t *cr, hex_color_t color)
+set_hex_color (cairo_t *cr, std_colors_t color)
 {
+	hex_color_t *col = get_std_color(color);
+	//printf("Set color r = %u g = %u b = %u \n", col->r, col->g, col->b);
     cairo_set_source_rgb (cr,
-			 color.r / 255.0,
-			 color.g / 255.0,
-			 color.b / 255.0);
+			 col->r / 255.0,
+			 col->g / 255.0,
+			 col->b / 255.0);
 }
 
 static void
@@ -37,26 +54,26 @@ bevel_box (cairo_t *cr, int x, int y, int width, int height)
     cairo_set_line_cap (cr, CAIRO_LINE_CAP_SQUARE);
 
     /* Fill and highlight */
-    set_hex_color (cr, HI_COLOR_1);
+    set_hex_color (cr, COL_HI_COLOR_1);
     cairo_rectangle (cr, x, y, width, height);
     cairo_fill (cr);
 
     /* 2nd highlight */
-    set_hex_color (cr, HI_COLOR_2);
+    set_hex_color (cr, COL_HI_COLOR_2);
     cairo_move_to (cr, x + 1.5, y + height - 1.5);
     cairo_rel_line_to (cr, width - 3, 0);
     cairo_rel_line_to (cr, 0, - (height - 3));
     cairo_stroke (cr);
 
     /* 1st lowlight */
-    set_hex_color (cr, LO_COLOR_1);
+    set_hex_color (cr, COL_LO_COLOR_1);
     cairo_move_to (cr, x + .5, y + height - 1.5);
     cairo_rel_line_to (cr, 0, - (height - 2));
     cairo_rel_line_to (cr, width - 2, 0);
     cairo_stroke (cr);
 
     /* 2nd lowlight */
-    set_hex_color (cr, LO_COLOR_2);
+    set_hex_color (cr, COL_LO_COLOR_2);
     cairo_move_to (cr, x + 1.5, y + height - 2.5);
     cairo_rel_line_to (cr, 0, - (height - 4));
     cairo_rel_line_to (cr, width - 4, 0);
@@ -75,25 +92,25 @@ bevel_circle (cairo_t *cr, int x, int y, int width)
     cairo_set_line_width (cr, 1);
 
     /* Fill and Highlight */
-    set_hex_color (cr, HI_COLOR_1);
+    set_hex_color (cr, COL_HI_COLOR_1);
     cairo_arc (cr, x+radius+1.5, y+radius+1.5, radius,
 	       0, 2* M_PI);
     cairo_fill (cr);
 
     /* 2nd highlight */
-    set_hex_color (cr, HI_COLOR_2);
+    set_hex_color (cr, COL_HI_COLOR_2);
     cairo_arc (cr, x+radius+0.5, y+radius+0.5, radius,
 	       0, 2 * M_PI);
     cairo_stroke (cr);
 
     /* 1st lowlight */
-    set_hex_color (cr, LO_COLOR_1);
+    set_hex_color (cr, COL_LO_COLOR_1);
     cairo_arc (cr, x+radius+0.5, y+radius+0.5, radius,
 	       3 * M_PI_4, 7 * M_PI_4);
     cairo_stroke (cr);
 
     /* 2nd lowlight */
-    set_hex_color (cr, LO_COLOR_2);
+    set_hex_color (cr, COL_LO_COLOR_2);
     cairo_arc (cr, x+radius+1.5, y+radius+1.5, radius,
 	       3 * M_PI_4, 7 * M_PI_4);
     cairo_stroke (cr);
@@ -108,13 +125,13 @@ flat_box (cairo_t *cr, int x, int y, int width, int height)
     cairo_save (cr);
 
     /* Fill background */
-    set_hex_color (cr, HI_COLOR_1);
+    set_hex_color (cr, COL_HI_COLOR_1);
     cairo_rectangle (cr, x+1, y+1, width-2, height-2);
     cairo_fill (cr);
 
     /* Stroke outline */
     cairo_set_line_width (cr, 1.0);
-    set_hex_color (cr, BLACK);
+    set_hex_color (cr, COL_BLACK);
     cairo_rectangle (cr, x + 1.5, y + 1.5, width - 3, height - 3);
     cairo_stroke (cr);
 
@@ -129,14 +146,14 @@ flat_circle (cairo_t *cr, int x, int y, int width)
     cairo_save (cr);
 
     /* Fill background */
-    set_hex_color (cr, HI_COLOR_1);
+    set_hex_color (cr, COL_HI_COLOR_1);
     cairo_arc (cr, x+radius+0.5, y+radius+0.5, radius-1,
 	       0, 2 * M_PI);
     cairo_fill (cr);
 
     /* Fill background */
     cairo_set_line_width (cr, 1.0);
-    set_hex_color (cr, BLACK);
+    set_hex_color (cr, COL_BLACK);
     cairo_arc (cr, x+radius+0.5, y+radius+0.5, radius-1,
 	       0, 2 * M_PI);
     cairo_stroke (cr);
@@ -150,13 +167,13 @@ groovy_box (cairo_t *cr, int x, int y, int width, int height)
     cairo_save (cr);
 
     /* Highlight */
-    set_hex_color (cr, HI_COLOR_1);
+    set_hex_color (cr, COL_HI_COLOR_1);
     cairo_set_line_width (cr, 2);
     cairo_rectangle (cr, x + 1, y + 1, width - 2, height - 2);
     cairo_stroke (cr);
 
     /* Lowlight */
-    set_hex_color (cr, LO_COLOR_1);
+    set_hex_color (cr, COL_LO_COLOR_1);
     cairo_set_line_width (cr, 1);
     cairo_rectangle (cr, x + 0.5, y + 0.5, width - 2, height - 2);
     cairo_stroke (cr);
@@ -165,7 +182,7 @@ groovy_box (cairo_t *cr, int x, int y, int width, int height)
 }
 
 #define CHECK_BOX_SIZE 13
-#define CHECK_COLOR BLACK
+#define CHECK_COLOR COL_BLACK
 
 typedef enum {UNCHECKED, CHECKED} checked_status_t;
 
@@ -192,7 +209,7 @@ check_box (cairo_t *cr, int x, int y, checked_status_t checked)
 }
 
 #define RADIO_SIZE CHECK_BOX_SIZE
-#define RADIO_DOT_COLOR BLACK
+#define RADIO_DOT_COLOR COL_BLACK
 static void
 radio_button (cairo_t *cr, int x, int y, checked_status_t checked)
 {
@@ -234,7 +251,7 @@ draw_bevels (cairo_t *cr, int width, int height)
 
 int cairo_test (cairo_t *cr)
 {
-	printf("Cairo start");
+	printf("Cairo start\n");
     /*cairo_t *cr;
     cairo_surface_t *surface;
 
@@ -243,9 +260,10 @@ int cairo_test (cairo_t *cr)
     cr = cairo_create (surface);
 */
     cairo_rectangle (cr, 0, 0, LCD_WIDTH, LCD_HEIGHT);
-    set_hex_color (cr, BG_COLOR);
+    set_hex_color (cr, COL_BG_COLOR);
     cairo_fill (cr);
 
+	
     draw_bevels (cr, LCD_WIDTH, LCD_HEIGHT);
     /*set_hex_color (cr, BLACK);
     cairo_move_to (cr, 100, 100);
@@ -284,8 +302,8 @@ void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text,
 }
 
 void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
-						hex_color_t color,
-						hex_color_t bg_color,
+						hex_color_t *color,
+						hex_color_t *bg_color,
 						char *text)
 {
 	if(text == NULL)
@@ -300,17 +318,17 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 
 	cairo_rectangle (cr, left, top, width, height);
 	cairo_set_source_rgb (cr, 
-			bg_color.r / 255.0, 
-			bg_color.g / 255.0, 
-			bg_color.b / 255.0);
+			bg_color->r / 255.0, 
+			bg_color->g / 255.0, 
+			bg_color->b / 255.0);
 
 	cairo_stroke_preserve(cr);
 	cairo_fill(cr);
 	
 	cairo_set_source_rgb (cr, 
-			color.r / 255.0, 
-			color.g / 255.0, 
-			color.b / 255.0);
+			color->r / 255.0, 
+			color->g / 255.0, 
+			color->b / 255.0);
 	cairo_select_font_face (cr, "sans", 0, 0);
 	cairo_set_font_size (cr, font_size);
 	cairo_text_extents (cr, "Wygitf", &extents);
@@ -344,8 +362,8 @@ void draw_dk_label(cairo_t *cr, dk_control *control)
 	draw_text_in_rect(cr, ((struct label_data_tag *)control->control_data)->font_size,
 				control->left, control->top,
                  control->right - control->left, control->bottom - control->top,
-                 ((struct label_data_tag *)control->control_data)->color,
-                 BG_COLOR,
+                 &((struct label_data_tag *)control->control_data)->color,
+                 get_std_color(COL_BG_COLOR),
                  ((struct label_data_tag *)control->control_data)->text);
 		
     cairo_restore (cr);
@@ -363,8 +381,8 @@ void draw_dk_text_box(cairo_t *cr, dk_control *control)
 	draw_text_in_rect(cr, ((struct text_box_data_tag *)control->control_data)->font_size,
 				control->left + 3, control->top + 3,
                  control->right - control->left - 6, control->bottom - control->top - 6,
-                 ((struct text_box_data_tag *)control->control_data)->color,
-                 HI_COLOR_1,
+                 &((struct text_box_data_tag *)control->control_data)->color,
+                 get_std_color(COL_HI_COLOR_1),
                  ((struct text_box_data_tag *)control->control_data)->text);
 		
     cairo_restore (cr);
@@ -475,6 +493,13 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
     cairo_restore (cr);
 }
 
+void cairo_clear_all(cairo_t *cr)
+{
+    cairo_rectangle (cr, 0, 0, LCD_WIDTH, LCD_HEIGHT);
+    set_hex_color (cr, COL_BG_COLOR);
+    cairo_fill (cr);
+	
+}
 
 void show_control(cairo_t *cr, dk_control *control)
 {

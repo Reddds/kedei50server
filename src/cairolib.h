@@ -51,6 +51,16 @@ typedef enum
 	CT_STATIC_IMAGE = 50
 }control_types;
 
+typedef enum
+{
+	COL_BLACK,
+	COL_BG_COLOR,
+	COL_HI_COLOR_1,
+	COL_HI_COLOR_2,
+	COL_LO_COLOR_1,
+	COL_LO_COLOR_2
+}std_colors_t;
+
 typedef struct 
 {
 	uint16_t id;
@@ -85,9 +95,15 @@ struct dk_image_data_tag
 	uint8_t *image_data;
 };
 
+hex_color_t *get_std_color(std_colors_t cid);
+void cairo_clear_all(cairo_t *cr);
 int cairo_test (cairo_t *cr);
 void cairo_line(cairo_t *cr, double stroke_width, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, hex_color_t color);
 void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text, hex_color_t color);
 void show_control(cairo_t *cr, dk_control *control);
 void set_text(cairo_t *cr, dk_control *control, char *text);
+void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+						hex_color_t *color,
+						hex_color_t *bg_color,
+						char *text);
 #endif

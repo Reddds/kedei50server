@@ -36,6 +36,8 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include <time.h>
+#include <pwd.h>
+#include <libconfig.h>
 
 //cairo
 #include <cairo.h>
@@ -45,6 +47,7 @@
 
 #include "kedei_lcd_v50_pi_pigpio.h"
 
+#define SETTING_FILE "/.config/kedeilcd"
 
 #define MYBUF 4000
 // Size of signature
@@ -56,6 +59,9 @@
 #define SCREEN_BUFFER_LEN (LCD_HEIGHT * STRIDE)
 #define READ_TIMEOUT_US 200
 
+config_t cfg; 
+config_setting_t *root, *setting, *group;//, *array;
+
 int client_to_server;
 char input_buf[MYBUF];
 //unsigned char image[STRIDE * LCD_HEIGHT];
@@ -63,6 +69,9 @@ uint8_t screen_buffer[SCREEN_BUFFER_LEN];
 
 const char acOpen[]  = {"\"[<{"};
 const char acClose[] = {"\"]>}"};
+
+extern volatile int touch_raw_x;
+extern volatile int touch_raw_y;
 
 #define MAX_CONTROL 256
 /*
@@ -94,6 +103,9 @@ cairo_surface_t *surface;
 pthread_t tid[2];
 void* doTimeShow(void *arg);
 pthread_mutex_t lock_draw;
+bool touch_calibrated = false;
+extern volatile int touch_offset_x, touch_offset_y;
+extern volatile double touch_scale_x, touch_scale_y;
 
 bool compare_signature(uint8_t sig[], char* val)
 {
@@ -1075,6 +1087,218 @@ void create_time_thread(dk_control *time_control)
         printf("\n Thread created successfully\n");
 }
 
+bool load_settings()
+{
+	struct passwd *pw = getpwuid(getuid());
+
+	const char *homedir = pw->pw_dir;
+	printf("homedir = %s\n", homedir);
+	char *fullpath = malloc(strlen(homedir) + strlen(SETTING_FILE) + 1);
+	if (fullpath == NULL)
+	{
+		printf("Error allocate memory for setting path!\n");
+		return false;
+	}
+	sprintf(fullpath, "%s%s", homedir, SETTING_FILE);
+	printf("Full settings path = %s\n", fullpath);
+
+	config_t cfg; 
+	config_setting_t *root, *setting, *group;//, *array;
+	config_init(&cfg); /* обязательная инициализация */
+
+	if( access( fullpath, F_OK ) != -1 ) {
+		// file exists
+		if(! config_read_file(&cfg, fullpath))
+		{
+			fprintf(stderr, "%s:%d - %s\n", config_error_file(&cfg),
+					config_error_line(&cfg), config_error_text(&cfg));
+			config_destroy(&cfg);
+			free(fullpath);
+			return(false);
+		}	
+	}
+	else
+	{
+		// create new settings
+		root = config_root_setting(&cfg);
+	/* Add some settings to the configuration. */
+		group = config_setting_add(root, "touchcalibration", CONFIG_TYPE_GROUP);
+
+		setting = config_setting_add(group, "x_offset", CONFIG_TYPE_INT);
+		config_setting_set_int(setting, 300);
+
+		setting = config_setting_add(group, "y_offset", CONFIG_TYPE_INT);
+		config_setting_set_int(setting, 400);
+
+		setting = config_setting_add(group, "x_coef", CONFIG_TYPE_FLOAT);
+		config_setting_set_float(setting, 15.6);
+
+		setting = config_setting_add(group, "y_coef", CONFIG_TYPE_FLOAT);
+		config_setting_set_float(setting, 13.3);
+
+		setting = config_setting_add(group, "calibrated", CONFIG_TYPE_BOOL);
+		config_setting_set_bool(setting, false);
+
+		// Write out the new configuration. 
+		if(! config_write_file(&cfg, fullpath))
+		{
+			fprintf(stderr, "Error while writing file.\n");
+			config_destroy(&cfg);
+			free(fullpath);
+			return(false);
+		}
+	}
+	free(fullpath);
+	return true;
+}
+
+void draw_calib_cross(uint16_t x, uint16_t y)
+{
+	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_set_line_width(cr, 1);
+	
+	cairo_move_to(cr, x - 20, y);
+    cairo_line_to(cr, x + 20, y);
+
+	cairo_move_to(cr, x, y - 20);
+    cairo_line_to(cr, x, y + 20);
+
+    cairo_stroke(cr);
+    
+	show_part(x - 20, y - 20, 40, 40);
+}
+
+void draw_calib_circle(uint16_t x, uint16_t y)
+{
+	cairo_set_line_width(cr, 9);  
+	cairo_set_source_rgb(cr, 0.69, 0.19, 0);
+	
+	cairo_arc(cr, x, y, 20, 0, 2 * M_PI);
+
+    cairo_fill (cr);
+    
+	show_part(x - 20, y - 20, 40, 40);
+}
+
+#define CALIB_ERR_DIST 100
+bool calibrate_touch()
+{
+	int lt_x, lt_y,
+		rt_x, rt_y,
+		rb_x, rb_y,
+		lb_x, lb_y;
+		
+	cairo_clear_all(cr);
+	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+	
+	printf("Calibrating touch...\n");
+	draw_text_in_rect(cr, 30, 130, 150, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "Calibrating...");
+	show_part(130, 150, 240, 36);
+	
+	// laft top point 30 30
+	draw_calib_cross(30, 30);
+	touch_raw_x = 0;
+	touch_raw_y = 0;
+    while(touch_raw_x == 0 || touch_raw_y == 0)
+    {
+		sleep(1);
+	}
+	lt_x = touch_raw_x;
+	lt_y = touch_raw_y;
+	printf("Top left: x = %d y = %d \n", lt_x, lt_y);
+	draw_calib_circle(30, 30);
+	
+	// right top point
+	draw_calib_cross(LCD_WIDTH - 30, 30);
+	touch_raw_x = 0;
+	touch_raw_y = 0;
+    while(touch_raw_x == 0 || touch_raw_y == 0)
+    {
+		sleep(1);
+	}
+	rt_x = touch_raw_x;
+	rt_y = touch_raw_y;
+	printf("Top right: x = %d y = %d \n", rt_x, rt_y);
+	if(abs(lt_y - rt_y) > CALIB_ERR_DIST)
+	{
+		printf("Diff y!\n");
+		return false;
+	}
+
+	draw_calib_circle(LCD_WIDTH - 30, 30);
+   
+	// right bottom point
+	draw_calib_cross(LCD_WIDTH - 30, LCD_HEIGHT - 30);
+	touch_raw_x = 0;
+	touch_raw_y = 0;
+    while(touch_raw_x == 0 || touch_raw_y == 0)
+    {
+		sleep(1);
+	}
+	rb_x = touch_raw_x;
+	rb_y = touch_raw_y;
+	printf("Bottom right: x = %d y = %d \n", rb_x, rb_y);
+	if(abs(rt_x - rb_x) > CALIB_ERR_DIST)
+	{
+		printf("Diff x!\n");
+		return false;
+	}
+
+	draw_calib_circle(LCD_WIDTH - 30, LCD_HEIGHT - 30);
+	   
+	// left bottom point
+	draw_calib_cross(30, LCD_HEIGHT - 30);
+	touch_raw_x = 0;
+	touch_raw_y = 0;
+    while(touch_raw_x == 0 || touch_raw_y == 0)
+    {
+		sleep(1);
+	}
+	lb_x = touch_raw_x;
+	lb_y = touch_raw_y;
+	printf("Bottom left: x = %d y = %d \n", lb_x, lb_y);
+	if(abs(lt_x - lb_x) > CALIB_ERR_DIST
+		|| abs(lb_y - rb_y) > CALIB_ERR_DIST)
+	{
+		printf("Diff x or y!\n");
+		return false;
+	}
+	draw_calib_circle(30, LCD_HEIGHT - 30);
+
+	int dist_x = LCD_WIDTH - 60;
+	int dist_y = LCD_HEIGHT - 60;
+
+	double mid_left_x = (lt_x + lb_x) / 2.0;
+	double mid_right_x = (rt_x + rb_x) / 2.0;
+	
+	double mid_top_y = (lt_y + rt_y) / 2.0;
+	double mid_bot_y = (lb_y + rb_y) / 2.0;
+
+	double tmp_scale_x = (double)dist_x / (mid_right_x - mid_left_x);
+	double tmp_scale_y = (double)dist_y / (mid_bot_y - mid_top_y);
+
+	if(fabs(tmp_scale_x) < 0.001 || fabs(tmp_scale_y) < 0.001)
+	{
+		printf("Scale error x = %f y = %f", tmp_scale_x, tmp_scale_y);
+		return false;
+	}
+
+	touch_scale_x = tmp_scale_x;
+	touch_scale_y = tmp_scale_y;
+
+	touch_offset_x = mid_left_x - 30 / touch_scale_x;
+	touch_offset_y = mid_top_y - 30 / touch_scale_y;
+	
+//int touch_offset_x = 0, touch_offset_y = 0;
+//double touch_scale_x = 1, touch_scale_y = 1;
+	
+	printf("Calibrating complete!Offset X = %d Y = %d  Scale X = %f Y = %f\n",
+		touch_offset_x, touch_offset_y, touch_scale_x, touch_scale_y);
+
+	// testing
+    return true;
+}
+
 int main(int argc,char *argv[]) 
 {
 	//cairo_test();
@@ -1142,6 +1366,16 @@ int main(int argc,char *argv[])
 		printf ("Non-option argument %s\n", argv[index]);
 
 
+	
+
+	// get settings
+	if(!load_settings())
+	{
+		return EXIT_FAILURE;
+	}
+	//return EXIT_SUCCESS;
+
+	
 
 
 	printf ("Open LCD\n");
@@ -1151,11 +1385,17 @@ int main(int argc,char *argv[])
 		fprintf (stderr, "Error initialise GPIO!\nNeed stop daemon:\n  sudo killall pigpiod");
 		return 1;
 	}
+
+	
+	
 	create_sensor_thread();
+
+	
+	
 	printf ("Init LCD\n");
 	//delayms(3000);
 	lcd_init(initRotation);
-
+	
 	//printf ("Black LCD\n");
 	//delayms(3000);
 	//lcd_fill(0); //black out the screen.
@@ -1164,16 +1404,17 @@ int main(int argc,char *argv[])
     surface = cairo_image_surface_create_for_data (screen_buffer, CAIRO_FORMAT_RGB24,
 						   LCD_WIDTH, LCD_HEIGHT, STRIDE);
     cr = cairo_create (surface);
+	
 
-    //cairo_rectangle (cr, 0, 0, LCD_WIDTH, LCD_HEIGHT);
-    //set_hex_color (cr, BG_COLOR);
-    //cairo_fill (cr);
+	if(!touch_calibrated)
+		while(!calibrate_touch());
+		
 
-	cairo_test (cr);
+	cairo_clear_all(cr);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+	
 
-
-
+	//return EXIT_SUCCESS;
 
 	if (pthread_mutex_init(&lock_draw, NULL) != 0)
     {
