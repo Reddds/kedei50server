@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <pigpio.h>
-
+#include <pthread.h>
 
 
 
@@ -33,6 +33,7 @@
 #define LCD_CS 1
 #define TOUCH_CS 0
 
+#define SENSOR_IRQ_PIN 25
 
 
 
@@ -48,6 +49,7 @@ volatile uint8_t lcd_rotation;
 volatile uint16_t lcd_h;
 volatile uint16_t lcd_w;
 volatile int spih;
+
 
 uint16_t colors[16] = {
 	0b0000000000000000,				/* BLACK	000000 */
@@ -68,6 +70,10 @@ uint16_t colors[16] = {
 	0b1111111111111111				/* WHITE	ffffff */
 };
 
+//pthread_mutex_t lock_spi;
+volatile int spi_sensor_h;
+pthread_t sensor_thread_id;
+void* do_sensor_thread(void *arg);
 
 void delayms(int ms) {
 	//time_sleep(ms/1000.0);
@@ -88,18 +94,53 @@ int lcd_open(void) {
 	spih = spiOpen(LCD_CS, 19200000, 0);
 	if(spih < 0) 
 		return -1;
+	spi_sensor_h = spiOpen(TOUCH_CS, 61000, 0);
+	if(spi_sensor_h < 0)
+	{
+		printf("Error open Sensor spi!");
+		return -1;
+	}
+	/*if (pthread_mutex_init(&lock_spi, NULL) != 0)
+    {
+        printf("\n mutex spi init failed!\n");
+        return 1;
+    }*/
 	return 0;
 }
 
 int lcd_close(void) {
+	spiClose(spi_sensor_h);
 	spiClose(spih);
 	gpioTerminate();
-
+	//pthread_mutex_destroy(&lock_spi);
 	return 0;
 }
 
-int spi_transmit(int devsel, uint8_t *data, int len) {
-	return spiWrite(spih, (char*)data, len);
+int spi_transmit(int devsel, uint8_t *data, int len)
+{
+	int res;
+	//pthread_mutex_lock(&lock_spi);
+	res = spiWrite(spih, (char*)data, len);
+	//pthread_mutex_unlock(&lock_spi);
+	return res;
+}
+
+int spi_sensor_transmit(int devsel, uint8_t *data, int len)
+{
+	int res;
+	//pthread_mutex_lock(&lock_spi);
+	res = spiWrite(spi_sensor_h, (char*)data, len);
+	//pthread_mutex_unlock(&lock_spi);
+	return res;
+}
+
+int spi_sensor_transmit_r(int devsel, uint8_t *data_tx, uint8_t *data_rx, int len)
+{
+	int res;
+	//pthread_mutex_lock(&lock_spi);
+	res = spiXfer(spi_sensor_h, (char*)data_tx, (char*)data_rx, len);
+	//pthread_mutex_unlock(&lock_spi);
+	return res;
 }
 
 void lcd_rst(void) {
@@ -370,7 +411,7 @@ void lcd_img(char *fname, uint16_t x, uint16_t y) {
 		}
 		
 		printf("\n\n");
-		printf("File Size: %lu\nOffset: %lu\nWidth: %lu\nHeight: %lu\nBPP: %u\nStruct size: %lu\nrowBytes: %lu\n\n", 
+		printf("File Size: %u\nOffset: %u\nWidth: %u\nHeight: %u\nBPP: %u\nStruct size: %u\nrowBytes: %u\n\n", 
 			isize, ioffset, iwidth, iheight, ibpp, structSize, rowbytes);
 
 		for (p = iheight - 1; p > 0; p--) {
@@ -544,5 +585,273 @@ int main(int argc,char *argv[])
 	lcd_img("kedei_lcd_v50_pi.bmp", 50, 5);
 
 	lcd_close();
+
 }
 */
+#define	chy 	0x90	//координатные оси дисплея и тачскрина поменяны местами(там где у дисплея Х у тачсрина Y)
+#define	chx 	0xD0	//за основу возьмём оси дисплея
+#define touch_z1 0xB8
+#define touch_z2 0xC8
+#define touch_sensitivity 245
+
+int pin_val = PI_HIGH;
+int skip_alerts = 0;
+int calibrate_min_x = 1000000,
+	calibrate_max_x = 0,
+	calibrate_min_y = 1000000,
+	calibrate_max_y = 0;
+
+bool get_touch_value(uint8_t cmd, uint8_t *b1, uint8_t *b2)
+{
+	uint8_t buff_tx[3], buff_rx[3];
+	buff_tx[0] = cmd;
+	buff_tx[1] = 0x00;
+	buff_tx[2] = 0x00;
+	int sres = spi_sensor_transmit_r(TOUCH_CS, &buff_tx[0], &buff_rx[0], sizeof(buff_tx));
+	if(sres < sizeof(buff_rx))
+	{
+		printf("Receive Error!\n");
+		return false;
+	}
+	*b1 = buff_rx[1];
+	*b2 = buff_rx[2];
+	return true;
+}
+
+void get_sensor_values()
+{
+	uint8_t b1, b2;
+	uint16_t touch_x = 0;
+	uint16_t touch_y = 0;
+	/*uint16_t touch_z1_val = 0;
+	uint16_t touch_z2_val = 0;
+
+	if(!get_touch_value(touch_z1, &b1, &b2))
+	{
+		return;
+	}
+	touch_z1_val = (b1 << 1) | (b2 >> 7);
+	if(!get_touch_value(touch_z2, &b1, &b2))
+	{
+		return;
+	}
+	touch_z2_val = (b1 << 1) | (b2 >> 7);
+	if(touch_z2_val - touch_z1_val < touch_sensitivity)
+		return;
+	*/
+	
+	if(!get_touch_value(chx, &b1, &b2))
+	{
+		return;
+	}
+	touch_x = (b1<< 5) | (b2 >> 3);
+	if(touch_x == 0)
+	{
+		skip_alerts++;
+		return;
+	}
+
+	usleep(100);
+	
+	if(!get_touch_value(chy, &b1, &b2))
+	{
+		return;
+	}
+	touch_y = 4095 - ((b1<< 5) | (b2 >> 3)); //4095
+	
+	if(touch_y == 0)
+	{
+		skip_alerts++;
+		return;
+	}
+	if(calibrate_min_x > touch_x)
+		calibrate_min_x = touch_x;
+	if(calibrate_max_x < touch_x)
+		calibrate_max_x = touch_x;
+		
+	if(calibrate_min_y > touch_y)
+		calibrate_min_y = touch_y;
+	if(calibrate_max_y < touch_y)
+		calibrate_max_y = touch_y;
+	/*printf("Receive X = %u Y = %u, || minX = %d maxX = %d | minY = %d maxY = %d || skip = %i\n",
+		touch_x, touch_y,
+		calibrate_min_x, calibrate_max_x, calibrate_min_y, calibrate_max_y,
+		skip_alerts);*/
+	printf("Receive X = %u Y = %u, skip = %i\n",
+		touch_x, touch_y,
+		skip_alerts);
+
+	//printf("Receive Y = %u [%02X %02X %02X]\n", touch_y, buff_rx[0], buff_rx[1], buff_rx[2]);
+	skip_alerts = 0;
+}
+	
+void alert(int gpio, int level, uint32_t tick)
+{
+	if(level == PI_TIMEOUT)
+		return;
+	if(level == pin_val)
+		return;
+	pin_val = level;
+	//printf("event detected for pin/ Level = %d\n", level);
+
+	// Off interrupt !!!!!
+	gpioSetAlertFunc(SENSOR_IRQ_PIN, NULL);
+	while(true)
+	{
+		if(level == PI_LOW)
+		{
+			uint8_t b1, b2;
+			uint16_t touch_x = 0;
+			uint16_t touch_y = 0;
+			/*uint16_t touch_z1_val = 0;
+			uint16_t touch_z2_val = 0;
+
+			if(!get_touch_value(touch_z1, &b1, &b2))
+			{
+				return;
+			}
+			touch_z1_val = (b1 << 1) | (b2 >> 7);
+			if(!get_touch_value(touch_z2, &b1, &b2))
+			{
+				return;
+			}
+			touch_z2_val = (b1 << 1) | (b2 >> 7);
+			if(touch_z2_val - touch_z1_val < touch_sensitivity)
+				return;
+			*/
+			
+			if(!get_touch_value(chx, &b1, &b2))
+			{
+				break;
+			}
+			touch_x = (b1<< 5) | (b2 >> 3);
+			if(touch_x == 0)
+			{
+				skip_alerts++;
+				break;
+			}
+
+			usleep(100);
+			
+			if(!get_touch_value(chy, &b1, &b2))
+			{
+				break;
+			}
+			touch_y = 4095 - ((b1<< 5) | (b2 >> 3)); //4095
+			
+			if(touch_y == 0)
+			{
+				skip_alerts++;
+				break;
+			}
+			if(calibrate_min_x > touch_x)
+				calibrate_min_x = touch_x;
+			if(calibrate_max_x < touch_x)
+				calibrate_max_x = touch_x;
+				
+			if(calibrate_min_y > touch_y)
+				calibrate_min_y = touch_y;
+			if(calibrate_max_y < touch_y)
+				calibrate_max_y = touch_y;
+			/*printf("Receive X = %u Y = %u, || minX = %d maxX = %d | minY = %d maxY = %d || skip = %i\n",
+				touch_x, touch_y,
+				calibrate_min_x, calibrate_max_x, calibrate_min_y, calibrate_max_y,
+				skip_alerts);*/
+			printf("Receive X = %u Y = %u, skip = %i\n",
+				touch_x, touch_y,
+				skip_alerts);
+
+			//printf("Receive Y = %u [%02X %02X %02X]\n", touch_y, buff_rx[0], buff_rx[1], buff_rx[2]);
+			skip_alerts = 0;
+		}
+		break;
+	}
+	usleep(100);
+	// On interrupt !!!!!
+	gpioSetAlertFunc(SENSOR_IRQ_PIN, alert);
+}
+
+void create_sensor_thread()
+{
+	printf("Init sensor spi...\n");
+
+	uint8_t buff[3];
+
+	buff[0] = 0x90;
+	buff[1] = 0x00;
+	buff[2] = 0x00;
+	int sres = spi_sensor_transmit(TOUCH_CS, &buff[0], sizeof(buff));
+	//PI_BAD_HANDLE, PI_BAD_SPI_COUNT, or PI_SPI_XFER_FAILED
+	if(sres < sizeof(buff))
+	{
+		printf("Sensor init error 1!\n");
+		return;
+	}
+	usleep(10);
+	
+	printf("sensor scan start/ Listening GPIO %u!", SENSOR_IRQ_PIN);
+	gpioSetMode(SENSOR_IRQ_PIN, PI_INPUT);
+	//gpioSetPullUpDown(SENSOR_IRQ_PIN, PI_PUD_UP);
+	/* monitor IR level changes */
+
+//	alert
+//!!!	gpioSetAlertFunc(SENSOR_IRQ_PIN, alert);
+	// 5ms max gap after last pulse 
+	//gpioSetWatchdog(SENSOR_IRQ_PIN, 200);
+	
+	
+	int err = pthread_create(&sensor_thread_id, NULL, &do_sensor_thread, NULL);
+    if (err != 0)
+        printf("\ncan't create thread :[%s]", strerror(err));
+    else
+        printf("\n Sensor thread created successfully\n");
+}
+
+void* do_sensor_thread(void *arg)
+{
+	printf("sensor scan start/ Listening GPIO %u!", SENSOR_IRQ_PIN);
+	//gpioSetMode(SENSOR_PIN, PI_INPUT);
+	/* 5ms max gap after last pulse */
+	//gpioSetWatchdog(SENSOR_PIN, 5);
+	/* monitor IR level changes */
+	//gpioSetAlertFunc(SENSOR_PIN, alert);
+
+	while(true)
+	{
+		usleep(10000);
+		int level = gpioRead(SENSOR_IRQ_PIN);
+		if(level == PI_TIMEOUT)
+			continue;
+		if(level == pin_val)
+			continue;
+		pin_val = level;
+
+		if(level == PI_LOW)
+		{
+			get_sensor_values();
+		}
+	}
+
+
+	
+/*	bcm2835_gpio_fsel(RPI_GPIO_P1_22, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fen(RPI_GPIO_P1_22);
+	uint8_t eds;
+	printf("sensor scan start!");
+
+	while (1)
+    {
+		if (bcm2835_gpio_eds(RPI_GPIO_P1_22))
+        {
+            // Now clear the eds flag by setting it to 1
+            bcm2835_gpio_set_eds(RPI_GPIO_P1_22);
+            printf("event detected for pin\n");
+            //break;
+        }
+		// wait a bit
+        delay(100);
+    }
+	bcm2835_gpio_clr_fen(RPI_GPIO_P1_22);  */
+	
+	return NULL;
+}

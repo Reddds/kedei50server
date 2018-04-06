@@ -338,8 +338,8 @@ void draw_dk_label(cairo_t *cr, dk_control *control)
 	//cairo_text_extents_t extents;
 	cairo_save (cr);
 	
-	printf("cairo draw_label left = %u, top = %u, right = %u, bottom = %u\n",
-		control->left,  control->top, control->right, control->bottom);
+	//printf("cairo draw_label left = %u, top = %u, right = %u, bottom = %u\n",
+	//	control->left,  control->top, control->right, control->bottom);
 
 	draw_text_in_rect(cr, ((struct label_data_tag *)control->control_data)->font_size,
 				control->left, control->top,
@@ -553,10 +553,10 @@ bool change_text(char **old, char *new)
 
 void label_set_text(cairo_t *cr, dk_control *control, char *text)
 {
-	printf("label_set_text\n");
+//	printf("label_set_text\n");
 	if(change_text(&((struct label_data_tag *)control->control_data)->text, text))
 	{
-		printf("draw_dk_labeldraw_dk_label new text = %s\n", ((struct label_data_tag *)control->control_data)->text);
+//		printf("draw_dk_labeldraw_dk_label new text = %s\n", ((struct label_data_tag *)control->control_data)->text);
 		draw_dk_label(cr, control);
 	}
 }

@@ -1151,6 +1151,7 @@ int main(int argc,char *argv[])
 		fprintf (stderr, "Error initialise GPIO!\nNeed stop daemon:\n  sudo killall pigpiod");
 		return 1;
 	}
+	create_sensor_thread();
 	printf ("Init LCD\n");
 	//delayms(3000);
 	lcd_init(initRotation);
@@ -1257,6 +1258,7 @@ int main(int argc,char *argv[])
 // time thread
 void* doTimeShow(void *arg)
 {
+	
 	dk_control *time_control = (dk_control *)arg;
     unsigned long i = 0;
     //pthread_t id = pthread_self();
@@ -1271,13 +1273,13 @@ void* doTimeShow(void *arg)
 //    }
 	char buf[9];
 	buf[8] = 0;
-	while(true)
+	while(false)//!!!!!!
 	{
 		time_t t = time(NULL);
 		struct tm tm = *localtime(&t);
 		sprintf(buf, "%2d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
 		pthread_mutex_lock(&lock_draw);
-		printf("Cur time = %s\n", buf);
+		//printf("Cur time = %s\n", buf);
 		set_text(cr, time_control, buf);
 		show_part(time_control->left, time_control->top, time_control->right - time_control->left, time_control->bottom - time_control->top);
 		pthread_mutex_unlock(&lock_draw);

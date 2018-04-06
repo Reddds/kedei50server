@@ -21,6 +21,7 @@
 #include <sys/ioctl.h>
 #include <bcm2835.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "kedei_lcd_v50_pi_pigpio.h"
 
@@ -58,11 +59,21 @@ uint16_t colors[16] = {
 	0b1111111111111111				/* WHITE	ffffff */
 };
 
+pthread_t sensor_thread_id;
+void* do_sensor_thread(void *arg);
 
 void delayms(int ms) {
 	delay(ms);
 }
 
+void create_sensor_thread()
+{
+	int err = pthread_create(&sensor_thread_id, NULL, &do_sensor_thread, NULL);
+    if (err != 0)
+        printf("\ncan't create thread :[%s]", strerror(err));
+    else
+        printf("\n Sensor thread created successfully\n");
+}
 
 int lcd_open(void) {
 	int r;
@@ -453,3 +464,25 @@ void loop() {
 	lcd_close();
 }*/
 
+void* do_sensor_thread(void *arg)
+{
+	bcm2835_gpio_fsel(RPI_GPIO_P1_22, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fen(RPI_GPIO_P1_22);
+	uint8_t eds;
+	printf("sensor scan start!");
+	
+	while (1)
+    {
+		if (bcm2835_gpio_eds(RPI_GPIO_P1_22))
+        {
+            // Now clear the eds flag by setting it to 1
+            bcm2835_gpio_set_eds(RPI_GPIO_P1_22);
+            printf("event detected for pin\n");
+            //break;
+        }
+		// wait a bit
+        delay(100);
+    }
+	bcm2835_gpio_clr_fen(RPI_GPIO_P1_22);
+	return NULL;
+}

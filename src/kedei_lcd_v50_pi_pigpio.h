@@ -31,5 +31,5 @@ void lcd_fill(uint16_t col);
 void lcd_init(enum lcd_rotations rotation);
 void lcd_colorRGB(uint8_t r, uint8_t g, uint8_t b);
 void lcd_setframe(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
-
+void create_sensor_thread();
 #endif
