@@ -77,6 +77,7 @@ void* do_sensor_thread(void *arg);
 volatile int touch_raw_x = 0;
 volatile int touch_raw_y = 0;
 volatile int touch_offset_x = 0, touch_offset_y = 0;
+volatile uint16_t touch_x = 0, touch_y = 0;
 volatile double touch_scale_x = 1, touch_scale_y = 1;
 
 
@@ -626,8 +627,8 @@ bool get_touch_value(uint8_t cmd, uint8_t *b1, uint8_t *b2)
 void get_sensor_values()
 {
 	uint8_t b1, b2;
-	uint16_t touch_x = 0;
-	uint16_t touch_y = 0;
+	uint16_t tmp_touch_x = 0;
+	uint16_t tmp_touch_y = 0;
 	/*uint16_t touch_z1_val = 0;
 	uint16_t touch_z2_val = 0;
 
@@ -649,8 +650,8 @@ void get_sensor_values()
 	{
 		return;
 	}
-	touch_x = ((b1<< 5) | (b2 >> 3));
-	if(touch_x == 0 || touch_x == 4095)
+	tmp_touch_x = ((b1<< 5) | (b2 >> 3));
+	if(tmp_touch_x == 0 || tmp_touch_x == 4095)
 	{
 		skip_alerts++;
 		return;
@@ -662,16 +663,16 @@ void get_sensor_values()
 	{
 		return;
 	}
-	touch_y = 4095 - ((b1<< 5) | (b2 >> 3)); //4095
+	tmp_touch_y = 4095 - ((b1<< 5) | (b2 >> 3)); //4095
 	
-	if(touch_y == 0 || touch_y == 4095)
+	if(tmp_touch_y == 0 || tmp_touch_y == 4095)
 	{
 		skip_alerts++;
 		return;
 	}
 
-	touch_raw_x = touch_x;
-	touch_raw_y = touch_y;
+	touch_raw_x = tmp_touch_x;
+	touch_raw_y = tmp_touch_y;
 	
 	/*if(calibrate_min_x > touch_x)
 		calibrate_min_x = touch_x;
@@ -682,14 +683,38 @@ void get_sensor_values()
 		calibrate_min_y = touch_y;
 	if(calibrate_max_y < touch_y)
 		calibrate_max_y = touch_y;*/
-	double tx = (touch_x - touch_offset_x) * touch_scale_x;
-	double ty = (touch_y - touch_offset_y) * touch_scale_y;
+	double tx = (tmp_touch_x - touch_offset_x) * touch_scale_x;
+	double ty = (tmp_touch_y - touch_offset_y) * touch_scale_y;
 	/*printf("Receive X = %u Y = %u, || minX = %d maxX = %d | minY = %d maxY = %d || skip = %i\n",
 		touch_x, touch_y,
 		calibrate_min_x, calibrate_max_x, calibrate_min_y, calibrate_max_y,
 		skip_alerts);*/
+	if(tx < 0)
+	{
+		touch_x = 0;
+	}
+	else if(tx >= LCD_WIDTH)
+	{
+		touch_x = LCD_WIDTH - 1;
+	}
+	else
+	{
+		touch_x = tx;
+	}
+	if(ty < 0)
+	{
+		touch_y = 0;
+	}
+	else if(ty >= LCD_HEIGHT)
+	{
+		touch_y = LCD_HEIGHT - 1;
+	}
+	else
+	{
+		touch_y = ty;
+	}
 	printf("Receive X = %u Y = %u, skip = %i, conv x = %f y = %f\n",
-		touch_x, touch_y,
+		tmp_touch_x, tmp_touch_y,
 		skip_alerts,
 		tx, ty);
 

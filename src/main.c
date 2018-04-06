@@ -72,6 +72,7 @@ const char acClose[] = {"\"]>}"};
 
 extern volatile int touch_raw_x;
 extern volatile int touch_raw_y;
+extern volatile uint16_t touch_x, touch_y;
 
 #define MAX_CONTROL 256
 /*
@@ -1296,6 +1297,33 @@ bool calibrate_touch()
 		touch_offset_x, touch_offset_y, touch_scale_x, touch_scale_y);
 
 	// testing
+	draw_text_in_rect(cr, 30, 130, 120, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "Touch test...");
+	draw_text_in_rect(cr, 30, 130, 160, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "For exit press OK");
+
+	draw_text_in_rect(cr, 30, 200, 200, 60, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "OK");
+
+	cairo_set_source_rgb (cr, 0, 1, 0);
+	cairo_set_line_width(cr, 2);
+	cairo_rectangle (cr, 200, 200, 60, 36);
+	cairo_stroke (cr);
+	show_part(130, 120, 240, 150);
+
+	
+
+	while(true)
+	{
+		touch_x = 1000;
+		touch_y = 1000;
+		while(touch_x == 1000 || touch_y == 1000)
+		{
+			sleep(1);
+		}
+		if(touch_x >= 200 && touch_x < 200 + 60
+			&& touch_y >= 200 && touch_y < 200 + 36)
+			return true;
+		draw_calib_circle(touch_x, touch_y);
+	}
+	
     return true;
 }
 
