@@ -1088,6 +1088,14 @@ void create_time_thread(dk_control *time_control)
         printf("\n Thread created successfully\n");
 }
 
+
+#define SETTING_TOUCH_CALIB_GROUP "touchcalibration"
+#define SETTING_X_OFFSET "x_offset"
+#define SETTING_Y_OFFSET "y_offset"
+#define SETTING_X_COEF "x_coef"
+#define SETTING_Y_COEF "y_coef"
+#define SETTING_CALIBRATED "calibrated"
+
 bool load_settings()
 {
 	struct passwd *pw = getpwuid(getuid());
@@ -1104,10 +1112,11 @@ bool load_settings()
 	printf("Full settings path = %s\n", fullpath);
 
 	config_t cfg; 
-	config_setting_t *root, *setting, *group;//, *array;
+	config_setting_t *setting;//, *group *root, ;//, *array;
 	config_init(&cfg); /* обязательная инициализация */
 
-	if( access( fullpath, F_OK ) != -1 ) {
+	if( access( fullpath, F_OK ) != -1 )
+	{
 		// file exists
 		if(! config_read_file(&cfg, fullpath))
 		{
@@ -1116,41 +1125,91 @@ bool load_settings()
 			config_destroy(&cfg);
 			free(fullpath);
 			return(false);
-		}	
-	}
-	else
-	{
-		// create new settings
-		root = config_root_setting(&cfg);
-	/* Add some settings to the configuration. */
-		group = config_setting_add(root, "touchcalibration", CONFIG_TYPE_GROUP);
+		}
 
-		setting = config_setting_add(group, "x_offset", CONFIG_TYPE_INT);
-		config_setting_set_int(setting, 300);
-
-		setting = config_setting_add(group, "y_offset", CONFIG_TYPE_INT);
-		config_setting_set_int(setting, 400);
-
-		setting = config_setting_add(group, "x_coef", CONFIG_TYPE_FLOAT);
-		config_setting_set_float(setting, 15.6);
-
-		setting = config_setting_add(group, "y_coef", CONFIG_TYPE_FLOAT);
-		config_setting_set_float(setting, 13.3);
-
-		setting = config_setting_add(group, "calibrated", CONFIG_TYPE_BOOL);
-		config_setting_set_bool(setting, false);
-
-		// Write out the new configuration. 
-		if(! config_write_file(&cfg, fullpath))
+		setting = config_lookup(&cfg, SETTING_TOUCH_CALIB_GROUP "." SETTING_CALIBRATED);
+		if(setting != NULL)
 		{
-			fprintf(stderr, "Error while writing file.\n");
-			config_destroy(&cfg);
-			free(fullpath);
-			return(false);
+			touch_calibrated = config_setting_get_bool(setting);
+		}
+		if(touch_calibrated)
+		{
+			setting = config_lookup(&cfg, SETTING_TOUCH_CALIB_GROUP "." SETTING_X_OFFSET);
+			if(setting != NULL)
+			{
+				touch_offset_x = config_setting_get_int(setting);
+			}
+			setting = config_lookup(&cfg, SETTING_TOUCH_CALIB_GROUP "." SETTING_Y_OFFSET);
+			if(setting != NULL)
+			{
+				touch_offset_y = config_setting_get_int(setting);
+			}
+			setting = config_lookup(&cfg, SETTING_TOUCH_CALIB_GROUP "." SETTING_X_COEF);
+			if(setting != NULL)
+			{
+				touch_scale_x = config_setting_get_float(setting);
+			}
+			setting = config_lookup(&cfg, SETTING_TOUCH_CALIB_GROUP "." SETTING_Y_COEF);
+			if(setting != NULL)
+			{
+				touch_scale_y = config_setting_get_float(setting);
+			}
+			
 		}
 	}
+	
+	config_destroy(&cfg);
 	free(fullpath);
 	return true;
+}
+
+void save_settings()
+{
+	struct passwd *pw = getpwuid(getuid());
+
+	const char *homedir = pw->pw_dir;
+	printf("homedir = %s\n", homedir);
+	char *fullpath = malloc(strlen(homedir) + strlen(SETTING_FILE) + 1);
+	if (fullpath == NULL)
+	{
+		printf("Error allocate memory for setting path!\n");
+		return;
+	}
+	sprintf(fullpath, "%s%s", homedir, SETTING_FILE);
+	printf("Full settings path = %s\n", fullpath);
+
+	config_t cfg; 
+	config_setting_t *root, *setting, *group;//, *array;
+	config_init(&cfg); /* обязательная инициализация */
+
+	// create new settings
+	root = config_root_setting(&cfg);
+/* Add some settings to the configuration. */
+	group = config_setting_add(root, SETTING_TOUCH_CALIB_GROUP, CONFIG_TYPE_GROUP);
+
+	setting = config_setting_add(group, SETTING_X_OFFSET, CONFIG_TYPE_INT);
+	config_setting_set_int(setting, touch_offset_x);
+
+	setting = config_setting_add(group, SETTING_Y_OFFSET, CONFIG_TYPE_INT);
+	config_setting_set_int(setting, touch_offset_y);
+
+	setting = config_setting_add(group, SETTING_X_COEF, CONFIG_TYPE_FLOAT);
+	config_setting_set_float(setting, touch_scale_x);
+
+	setting = config_setting_add(group, SETTING_Y_COEF, CONFIG_TYPE_FLOAT);
+	config_setting_set_float(setting, touch_scale_y);
+
+	setting = config_setting_add(group, SETTING_CALIBRATED, CONFIG_TYPE_BOOL);
+	config_setting_set_bool(setting, touch_calibrated);
+
+	// Write out the new configuration. 
+	if(! config_write_file(&cfg, fullpath))
+	{
+		fprintf(stderr, "Error while writing file.\n");
+	}
+	config_destroy(&cfg);
+	free(fullpath);
+	return;
 }
 
 void draw_calib_cross(uint16_t x, uint16_t y)
@@ -1295,7 +1354,8 @@ bool calibrate_touch()
 	
 	printf("Calibrating complete!Offset X = %d Y = %d  Scale X = %f Y = %f\n",
 		touch_offset_x, touch_offset_y, touch_scale_x, touch_scale_y);
-
+	touch_calibrated = true;
+	save_settings();
 	// testing
 	draw_text_in_rect(cr, 30, 130, 120, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "Touch test...");
 	draw_text_in_rect(cr, 30, 130, 160, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "For exit press OK");
