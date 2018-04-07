@@ -44,7 +44,7 @@
 #include <math.h>
 #include "cairolib.h"
 
-
+#include "dk_controls.h"
 #include "kedei_lcd_v50_pi_pigpio.h"
 
 #define SETTING_FILE "/.config/kedeilcd"
@@ -75,29 +75,11 @@ extern volatile int touch_raw_x;
 extern volatile int touch_raw_y;
 extern volatile uint16_t touch_x, touch_y;
 
-#define MAX_CONTROL 256
-/*
- * Types:
- * 1 - label within rectangle
- * 2 - text box
- * 
- * 102 - text box for finger
- * 
- * 10 - button
- * 11 - image button
- * 
- * 110 - button for finger
- * 111 - image button for finger
- * 
- * 20 - check box
- * 25 - radio button
- * 
- * 120 - check box for finger
- * 125 - radio button for finger
- * */
-dk_control *dk_controls[MAX_CONTROL];
+//#define MAX_CONTROL 256
 
-int last_control = -1;
+//dk_control *dk_controls[MAX_CONTROL];
+
+//int last_control = -1;
 
 cairo_t *cr;
 cairo_surface_t *surface;
@@ -419,16 +401,6 @@ void export_png()
 }
 
 
-dk_control *find_control(uint16_t id)
-{
-	for(uint8_t i = 0; i <= last_control; i++)
-	{
-		if(dk_controls[i] != NULL && dk_controls[i]->id == id)
-			return dk_controls[i];
-	}
-	return NULL;
-}
-
 char *strmbtok ( char *input, char *delimit, const char *openblock, const char *closeblock) {
     static char *token = NULL;
     char *lead = NULL;
@@ -681,49 +653,30 @@ void draw_d_label()
 }*/
 
 
-dk_control *add_control(uint16_t id, control_types type, uint16_t left, uint16_t top,
+dk_control *add_control_and_show(uint16_t id, uint16_t parent_id, control_types type,
+	uint16_t left, uint16_t top,
 	uint16_t width, uint16_t height,
 	void *control_data)
 {
-	if(last_control >= MAX_CONTROL)
-	{
-		printf("Control limit!\n");
-		free(control_data);
-		return NULL;
-	}
-	
-	if(find_control(id) != NULL)
-	{
-		printf("Control with id = %d already exist!\n", id);
-		free(control_data);
-		return NULL;
-	}
-
+	printf("Adding control\n");
 	if(width == 0 || height == 0
 		|| left + width > LCD_WIDTH
 		|| top + height > LCD_HEIGHT)
 		return NULL;
-		
-	last_control++;
-	dk_controls[last_control] = malloc(sizeof(dk_control));
-	dk_controls[last_control]->id = id;
-	dk_controls[last_control]->type = type;
-	dk_controls[last_control]->left = left;
-	dk_controls[last_control]->top = top;
-	dk_controls[last_control]->width = width;
-	dk_controls[last_control]->height = height;
-	dk_controls[last_control]->control_data = control_data;
-	dk_controls[last_control]->control_data1 = NULL;
-	dk_controls[last_control]->control_data2 = NULL;
-	dk_controls[last_control]->control_data3 = NULL;
-	dk_controls[last_control]->control_data4 = NULL;
+
+	dk_control *control = add_control(id, parent_id, type, left, top, width, height, control_data);
+	if(control == NULL)
+	{
+		printf("Error!!!\n");
+		return NULL;
+	}
 	
-	show_control(cr, dk_controls[last_control]);
+	show_control(cr, control);
 
 	my_write_event(id, "crok");	
 	
 	show_part(left, top, width, height);
-	return dk_controls[last_control];
+	return control;
 }
 
 //              id      fsize   x       y       width   height  r   g   b
@@ -785,7 +738,7 @@ void draw_d_label()
 		text_box_data->text = NULL;
 	}
 	
-	add_control(d_text_box_data.id, CT_LABEL, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
+	add_control_and_show(d_text_box_data.id, 0, CT_LABEL, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
 }
 
 //              id      fsize   x       y       width   height  r   g   b
@@ -847,7 +800,7 @@ void draw_d_text_box()
 		text_box_data->text = NULL;
 	}
 	
-	add_control(d_text_box_data.id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
+	add_control_and_show(d_text_box_data.id, 0, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
 }
 
 
@@ -950,7 +903,7 @@ void draw_d_image()
 	dk_image_data->image_len = d_image_data.image_len;
 	dk_image_data->image_data = image_src;
 
-	if(!add_control(d_image_data.id, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
+	if(!add_control_and_show(d_image_data.id, 0, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
 		d_image_data.width, d_image_data.height, dk_image_data))
 	{
 		free(image_src);
@@ -962,29 +915,14 @@ void draw_d_image()
 void redraw_all()
 {
 	cairo_clear_all(cr);
-	for(uint8_t control_pos = 0; control_pos <= last_control; control_pos++)
+	int controls_count = get_controls_count();
+	for(uint8_t control_pos = 0; control_pos < controls_count; control_pos++)
 	{
-		show_control(cr, dk_controls[control_pos]);
+		show_control(cr, get_control_at(control_pos));
 	}
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
 
-void free_control_mem(dk_control *control)
-{
-	if(control->control_data != NULL)
-		free(control->control_data);
-	if(control->control_data1 != NULL)
-		free(control->control_data1);
-	if(control->control_data2 != NULL)
-		free(control->control_data2);
-	if(control->control_data3 != NULL)
-		free(control->control_data3);
-	if(control->control_data4 != NULL)
-		free(control->control_data4);
-
-	free(control);
-	
-}
 
 //              id     
 // echo -e 'ddec\x01\x00' > /tmp/kedei_lcd_in
@@ -1000,29 +938,11 @@ void d_delete_control()
 		return;
 	}
 
-	dk_control *control = NULL;
-	uint8_t control_pos = 0;
-	for(control_pos = 0; control_pos <= last_control; control_pos++)
+	if(!delete_control(id))
 	{
-		if(dk_controls[control_pos] != NULL && dk_controls[control_pos]->id == id)
-		{
-			control = dk_controls[control_pos];
-			break;
-		}
-	}
-
-	if(control == NULL)
-	{
-		printf("Control with id = %d not found!\n", id);
+		printf("Eror deleting control with id = %d!\n", id);
 		return;
 	}
-
-	free_control_mem(control);
-
-	// shift to gap
-	for(;control_pos < last_control; control_pos++)
-		dk_controls[control_pos] = dk_controls[control_pos + 1];
-	last_control--;
 
 	redraw_all();
 	
@@ -1031,13 +951,7 @@ void d_delete_control()
 void d_delete_all_controls()
 {
 	printf("Delete all controls...\n");
-	if(last_control < 0)
-		return;
-	for(int control_pos = 0; control_pos <= last_control; control_pos++)
-	{
-		free_control_mem(dk_controls[control_pos]);
-	}
-	last_control = -1;
+	delete_all_controls();
 	cairo_clear_all(cr);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 	
@@ -1549,10 +1463,6 @@ int main(int argc,char *argv[])
 {
 	//cairo_test();
 	//return 0;
-	for(uint16_t i = 0; i < MAX_CONTROL; i++)
-	{
-		dk_controls[i] = NULL;
-	}
 	
 	uint8_t initRotation = 0;
 	int aflag = 0;
@@ -1668,13 +1578,15 @@ int main(int argc,char *argv[])
 		while(!calibrate_touch());
 		
 
+
 	cairo_clear_all(cr);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 	
 
+	init_controls();
 	//return EXIT_SUCCESS;
 
-	struct label_data_tag *text_box_data = (struct label_data_tag*)malloc(sizeof(struct label_data_tag));
+/*	struct label_data_tag *text_box_data = (struct label_data_tag*)malloc(sizeof(struct label_data_tag));
 	text_box_data->font_size = 32;
 	text_box_data->color.r = 40;
 	text_box_data->color.g = 0;
@@ -1683,12 +1595,12 @@ int main(int argc,char *argv[])
 	//strcpy(text_box_data->text, "Gt");
 	//text_box_data->text[2] = 0;
 	
-	dk_control *time_control = add_control(255, CT_LABEL, 200, 200, 150, 36, text_box_data);
+	dk_control *time_control = add_control_and_show(255, 0, CT_LABEL, 200, 200, 150, 36, text_box_data);
 	
 
 	create_time_thread(time_control);
 
-
+*/
 
 
 
@@ -1781,7 +1693,7 @@ void* doTimeShow(void *arg)
 		sleep(1);
 		i++;
 	}
-	printf("Exit thread");
+	printf("Exit time thread\n");
     return NULL;
 }
 

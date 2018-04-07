@@ -537,6 +537,8 @@ void show_control(cairo_t *cr, dk_control *control)
 		case CT_STATIC_IMAGE:
 			draw_dk_image(cr, control);
 			break;
+		case CT_PANEL:
+			break;
 	}
 }
 
@@ -644,6 +646,8 @@ void set_text(cairo_t *cr, dk_control *control, char *text)
 		case CT_FINGER_RADIO:
 			break;
 		case CT_STATIC_IMAGE:
+			break;
+		case CT_PANEL:
 			break;
 	}
 

@@ -2,7 +2,7 @@ CC=gcc
 BFLAGS=-Wall
 CFLAGS=-c -Wall `pkg-config --cflags libconfig`
 BOUT=-o "./dist/lcdout"
-BFILES="./src/main.c" "./src/cairolib.c"
+BFILES="./src/main.c" "./src/cairolib.c" "./src/dk_controls.c"
 BINCLUDE=-I/usr/include/cairo/
 BLINK=-lrt -lpng -lpthread `pkg-config --libs cairo libpng16 libconfig`
 

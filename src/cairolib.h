@@ -1,55 +1,14 @@
 #ifndef CAIROLIB_H
 #define CAIROLIB_H
 
+#include "dk_controls.h"
+
 typedef struct hex_color
 {
     uint8_t r, g, b;
 } hex_color_t;
 
-/*
- * 1 - label within rectangle
- * 2 - text box
- * 
- * 102 - text box for finger
- * 
- * 10 - button
- * 11 - image button
- * 
- * 110 - button for finger
- * 111 - image button for finger
- * 
- * 20 - check box
- * 25 - radio button
- * 
- * 120 - check box for finger
- * 125 - radio button for finger
- *
- *	50 - static image
- *
- * */
-typedef enum 
-{
-	CT_LABEL = 1,
-	CT_TEXT_BOX = 2,
-	
-	CT_FINGER_TEXT_BOX = 102,
-	
-	
-	CT_BUTTON = 10,
-	CT_IMAGE_BUTTON = 11,
-	
-	CT_FINGER_BUTTON = 110,
-	CT_FINGER_IMAGE_BUTTON = 111,
-	
-	
-	CT_CHECK_BOX = 20,
-	CT_RADIO = 25,
-	
-	CT_FINGER_CHECK_BOX = 120,
-	CT_FINGER_RADIO = 125,
 
-	CT_STATIC_IMAGE = 50
-}control_types;
 
 typedef enum
 {
@@ -61,22 +20,6 @@ typedef enum
 	COL_LO_COLOR_2
 }std_colors_t;
 
-typedef struct 
-{
-	uint16_t id;
-	control_types type;
-	uint16_t left;
-	uint16_t top;
-	uint16_t width;
-	uint16_t height;
-	// if control need memory it must use this pointers for alloc
-	// for proper free
-	void *control_data;
-	void *control_data1;
-	void *control_data2;
-	void *control_data3;
-	void *control_data4;
-}dk_control;
 
 
 struct label_data_tag

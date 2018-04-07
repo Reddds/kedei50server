@@ -2,6 +2,7 @@
 #define KEDEI_LCD_V50_PI_PIGPIO_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define LCD_WIDTH  480
 #define LCD_HEIGHT 320
@@ -9,9 +10,9 @@
 //#define uint8_t unsigned char
 //#define uint16_t unsigned int
 //#define uint32_t unsigned long
-#define bool uint8_t
-#define true 1
-#define false 0
+//#define bool uint8_t
+//#define true 1
+//#define false 0
 
 #define READ_32(buf, offset) (buf[offset] + (buf[offset + 1] << 8) + (buf[offset + 2] << 16) + (buf[offset + 3] << 24))
 #define READ_16(buf, offset) (buf[offset] + (buf[offset + 1] << 8))
