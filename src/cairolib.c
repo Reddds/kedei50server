@@ -361,7 +361,7 @@ void draw_dk_label(cairo_t *cr, dk_control *control)
 
 	draw_text_in_rect(cr, ((struct label_data_tag *)control->control_data)->font_size,
 				control->left, control->top,
-                 control->right - control->left, control->bottom - control->top,
+                 control->width, control->height,
                  &((struct label_data_tag *)control->control_data)->color,
                  get_std_color(COL_BG_COLOR),
                  ((struct label_data_tag *)control->control_data)->text);
@@ -374,13 +374,13 @@ void draw_dk_text_box(cairo_t *cr, dk_control *control)
 	//cairo_text_extents_t extents;
 	cairo_save (cr);
 	
-	printf("cairo draw_text_box left = %u, top = %u, right = %u, bottom = %u\n",
-		control->left,  control->top, control->right, control->bottom);
-	bevel_box (cr, control->left, control->top, control->right - control->left, control->bottom - control->top);
+	printf("cairo draw_text_box left = %u, top = %u, width = %u, height = %u\n",
+		control->left,  control->top, control->width, control->height);
+	bevel_box (cr, control->left, control->top, control->width, control->height);
 
 	draw_text_in_rect(cr, ((struct text_box_data_tag *)control->control_data)->font_size,
 				control->left + 3, control->top + 3,
-                 control->right - control->left - 6, control->bottom - control->top - 6,
+                 control->width - 6, control->height - 6,
                  &((struct text_box_data_tag *)control->control_data)->color,
                  get_std_color(COL_HI_COLOR_1),
                  ((struct text_box_data_tag *)control->control_data)->text);
@@ -429,14 +429,11 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
     //printf("Closure: pos = %u, max_size = %u\n",
 	//	closure.pos, closure.max_size);
 
-	uint16_t width = control->right - control->left;
-	uint16_t height = control->bottom - control->top;
-
 	//printf("Control width: %u, height: %u\n", width, height);
 	
 	//cairo_rectangle (cr, control->left, control->top, width, height);
 	cairo_translate(cr, control->left, control->top);
-	cairo_rectangle (cr, 0, 0, width, height);
+	cairo_rectangle (cr, 0, 0, control->width, control->height);
 	cairo_clip (cr);
 	cairo_new_path (cr); /* path not consumed by clip()*/
 
@@ -454,36 +451,36 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 	switch(dk_image_data->scale_type)
 	{
 		case 1: //1 - fit width
-			scale_y = scale_x = width / img_width;
+			scale_y = scale_x = control->width / img_width;
 			break;
 		case 2:// - fit height
-			scale_y = scale_x = height / img_height;
+			scale_y = scale_x = control->height / img_height;
 			break;
 		case 3:// - fit on max dimension
-			scale_x = width / img_width;
-			scale_y = height / img_height;
+			scale_x = control->width / img_width;
+			scale_y = control->height / img_height;
 			if(scale_x > scale_y)
 				scale_y = scale_x;
 			else
 				scale_x = scale_y;
 			break;
 		case 4:// - fit on min dimension
-			scale_x = width / img_width;
-			scale_y = height / img_height;
+			scale_x = control->width / img_width;
+			scale_y = control->height / img_height;
 			if(scale_x < scale_y)
 				scale_y = scale_x;
 			else
 				scale_x = scale_y;
 			break;
 		case 5:// - stretch
-			scale_x = width / img_width;
-			scale_y = height / img_height;
+			scale_x = control->width / img_width;
+			scale_y = control->height / img_height;
 			break;
 	}
 
 	
-	off_x = -(img_width * scale_x - width) / 2 / scale_x;
-	off_y = -(img_height * scale_y - height) / 2 / scale_y;
+	off_x = -(img_width * scale_x - control->width) / 2 / scale_x;
+	off_y = -(img_height * scale_y - control->height) / 2 / scale_y;
 
 	//printf("Image scale_type = %u, scale_x = %f, scale_y = %f, off_x = %f, off_y = %f\n", dk_image_data->scale_type, scale_x, scale_y, off_x, off_y);
 	cairo_scale (cr, scale_x, scale_y);

@@ -67,8 +67,8 @@ typedef struct
 	control_types type;
 	uint16_t left;
 	uint16_t top;
-	uint16_t right;
-	uint16_t bottom;
+	uint16_t width;
+	uint16_t height;
 	// if control need memory it must use this pointers for alloc
 	// for proper free
 	void *control_data;

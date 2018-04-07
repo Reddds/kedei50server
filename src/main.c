@@ -63,6 +63,7 @@ config_t cfg;
 config_setting_t *root, *setting, *group;//, *array;
 
 int client_to_server;
+int server_to_client = -1;
 char input_buf[MYBUF];
 //unsigned char image[STRIDE * LCD_HEIGHT];
 uint8_t screen_buffer[SCREEN_BUFFER_LEN];
@@ -103,7 +104,10 @@ cairo_surface_t *surface;
 
 pthread_t tid[2];
 void* doTimeShow(void *arg);
+bool my_write_event(uint16_t id, char *name);
+
 pthread_mutex_t lock_draw;
+pthread_mutex_t lock_fifo_write;
 bool touch_calibrated = false;
 extern volatile int touch_offset_x, touch_offset_y;
 extern volatile double touch_scale_x, touch_scale_y;
@@ -162,6 +166,41 @@ bool my_read(int fdesc, void *buf, int count)
 	int rcnt;
 	return my_read_count(fdesc, buf, count, &rcnt);
 }
+
+bool my_write(void *buf, int count)
+{
+	if(server_to_client < 0)
+		return false;
+	pthread_mutex_lock(&lock_fifo_write);
+	write(server_to_client, buf, count);
+	pthread_mutex_unlock(&lock_fifo_write);
+	return true;
+}
+
+bool my_write_event_with_add(uint16_t id, char *name, void *additional, uint16_t count)
+{
+	if(strlen(name) != 4)
+	{
+		printf("Event name len not 4!\n");
+		return false;
+	}
+	uint8_t outbuf[8];
+	memcpy(outbuf, &id, 2);
+	memcpy(&outbuf[2], name, 4);
+	memcpy(&outbuf[6], &count, 2);
+	if(!my_write(outbuf, sizeof(outbuf)))
+		return false;
+	if(count > 0)
+		if(!my_write(additional, count))
+			return false;
+	return true;	
+}
+
+bool my_write_event(uint16_t id, char *name)
+{
+	return my_write_event_with_add(id, name, NULL, 0);
+}
+
 
 bool skip_read(int skip)
 {
@@ -659,6 +698,11 @@ dk_control *add_control(uint16_t id, control_types type, uint16_t left, uint16_t
 		free(control_data);
 		return NULL;
 	}
+
+	if(width == 0 || height == 0
+		|| left + width > LCD_WIDTH
+		|| top + height > LCD_HEIGHT)
+		return NULL;
 		
 	last_control++;
 	dk_controls[last_control] = malloc(sizeof(dk_control));
@@ -666,8 +710,8 @@ dk_control *add_control(uint16_t id, control_types type, uint16_t left, uint16_t
 	dk_controls[last_control]->type = type;
 	dk_controls[last_control]->left = left;
 	dk_controls[last_control]->top = top;
-	dk_controls[last_control]->right = left + width;
-	dk_controls[last_control]->bottom = top + height;
+	dk_controls[last_control]->width = width;
+	dk_controls[last_control]->height = height;
 	dk_controls[last_control]->control_data = control_data;
 	dk_controls[last_control]->control_data1 = NULL;
 	dk_controls[last_control]->control_data2 = NULL;
@@ -675,6 +719,9 @@ dk_control *add_control(uint16_t id, control_types type, uint16_t left, uint16_t
 	dk_controls[last_control]->control_data4 = NULL;
 	
 	show_control(cr, dk_controls[last_control]);
+
+	my_write_event(id, "crok");	
+	
 	show_part(left, top, width, height);
 	return dk_controls[last_control];
 }
@@ -844,7 +891,7 @@ void d_set_text()
 	}
 	
 	set_text(cr, control, new_text);
-	show_part(control->left, control->top, control->right - control->left, control->bottom - control->top);
+	show_part(control->left, control->top, control->width, control->height);
 }
 
 
@@ -1109,6 +1156,7 @@ bool process_signature(uint8_t sig[])
 
 int fifo_loop()
 {
+	
 	printf("Server ON..............bufer = %d\n", MYBUF);
 	char *client_to_server_name = "/tmp/kedei_lcd_in";
 
@@ -1132,14 +1180,16 @@ int fifo_loop()
 
 	/* open, read, and display the message from the FIFO */
 	
-	/*printf("Opening FIFO %s ...\n", myfifo2);
-	server_to_client = open(myfifo2, O_WRONLY | O_NONBLOCK);
+	printf("Opening FIFO %s ...\n", server_to_client_name);
+	printf("For proceed open '%s' for read!\n", server_to_client_name);
+	server_to_client = open(server_to_client_name, O_WRONLY);// | O_NONBLOCK
 	if(server_to_client < 0)
 	{
-	   printf("Error open FIFO %s\n", myfifo2);
+	   printf("Error open FIFO %s\n", server_to_client_name);
 	   perror("open");
 	   return 1;
-	}*/
+	}
+	
 	uint8_t signature[SIGNATURE_SIZE];
 	printf("Server ON.\n");
 	while(1)
@@ -1584,9 +1634,18 @@ int main(int argc,char *argv[])
 		return 1;
 	}
 
+	if (pthread_mutex_init(&lock_draw, NULL) != 0)
+    {
+        printf("\n mutex init failed\n");
+        return 1;
+    }
+	if (pthread_mutex_init(&lock_fifo_write, NULL) != 0)
+    {
+        printf("\n mutex lock_fifo_write init failed\n");
+        return 1;
+    }
 	
 	
-	create_sensor_thread();
 
 	
 	
@@ -1603,6 +1662,7 @@ int main(int argc,char *argv[])
 						   LCD_WIDTH, LCD_HEIGHT, STRIDE);
     cr = cairo_create (surface);
 	
+	create_sensor_thread();
 
 	if(!touch_calibrated)
 		while(!calibrate_touch());
@@ -1614,11 +1674,6 @@ int main(int argc,char *argv[])
 
 	//return EXIT_SUCCESS;
 
-	if (pthread_mutex_init(&lock_draw, NULL) != 0)
-    {
-        printf("\n mutex init failed\n");
-        return 1;
-    }
 	struct label_data_tag *text_box_data = (struct label_data_tag*)malloc(sizeof(struct label_data_tag));
 	text_box_data->font_size = 32;
 	text_box_data->color.r = 40;
@@ -1720,7 +1775,7 @@ void* doTimeShow(void *arg)
 		pthread_mutex_lock(&lock_draw);
 		//printf("Cur time = %s\n", buf);
 		set_text(cr, time_control, buf);
-		show_part(time_control->left, time_control->top, time_control->right - time_control->left, time_control->bottom - time_control->top);
+		show_part(time_control->left, time_control->top, time_control->width, time_control->height);
 		pthread_mutex_unlock(&lock_draw);
 		
 		sleep(1);
