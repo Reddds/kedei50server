@@ -69,7 +69,13 @@ typedef struct
 	uint16_t top;
 	uint16_t right;
 	uint16_t bottom;
+	// if control need memory it must use this pointers for alloc
+	// for proper free
 	void *control_data;
+	void *control_data1;
+	void *control_data2;
+	void *control_data3;
+	void *control_data4;
 }dk_control;
 
 

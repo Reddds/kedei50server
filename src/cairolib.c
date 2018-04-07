@@ -545,6 +545,7 @@ void show_control(cairo_t *cr, dk_control *control)
 
 bool change_text(char **old, char *new)
 {
+	//printf("change_text %s => %s\n", *old, new);
 	uint16_t slen = 0;
 	if(new != NULL)
 		slen = strlen(new);
@@ -564,7 +565,11 @@ bool change_text(char **old, char *new)
 		if(slen > 0)
 		{
 			if(slen != strlen(*old))
-				*old = (char *)realloc(old, slen);
+			{
+				//printf("Before realloc\n");
+				*old = (char *)realloc(*old, slen);
+				//printf("After realloc\n");
+			}
 		}
 		else
 		{
@@ -572,17 +577,29 @@ bool change_text(char **old, char *new)
 		}
 	}
 	if(*old != NULL)
+	{
 		strcpy(*old, new);
+		//printf("Copied!\n");
+	}
+	else
+	{
+		printf("*old = NULL!!\n");
+	}
+	
 	return true;
 }
 
 void label_set_text(cairo_t *cr, dk_control *control, char *text)
 {
-//	printf("label_set_text\n");
+	//printf("label_set_text\n");
 	if(change_text(&((struct label_data_tag *)control->control_data)->text, text))
 	{
-//		printf("draw_dk_labeldraw_dk_label new text = %s\n", ((struct label_data_tag *)control->control_data)->text);
+		//printf("draw_dk_labeldraw_dk_label new text = %s\n", ((struct label_data_tag *)control->control_data)->text);
 		draw_dk_label(cr, control);
+	}
+	else
+	{
+		printf("Error changing text!\n");
 	}
 }
 

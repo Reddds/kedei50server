@@ -94,7 +94,7 @@ extern volatile uint16_t touch_x, touch_y;
  * 120 - check box for finger
  * 125 - radio button for finger
  * */
-dk_control dk_controls[MAX_CONTROL];
+dk_control *dk_controls[MAX_CONTROL];
 
 int last_control = -1;
 
@@ -384,8 +384,8 @@ dk_control *find_control(uint16_t id)
 {
 	for(uint8_t i = 0; i <= last_control; i++)
 	{
-		if(dk_controls[i].id == id)
-			return &dk_controls[i];
+		if(dk_controls[i] != NULL && dk_controls[i]->id == id)
+			return dk_controls[i];
 	}
 	return NULL;
 }
@@ -661,17 +661,22 @@ dk_control *add_control(uint16_t id, control_types type, uint16_t left, uint16_t
 	}
 		
 	last_control++;
-	dk_controls[last_control].id = id;
-	dk_controls[last_control].type = type;
-	dk_controls[last_control].left = left;
-	dk_controls[last_control].top = top;
-	dk_controls[last_control].right = left + width;
-	dk_controls[last_control].bottom = top + height;
-	dk_controls[last_control].control_data = control_data;
+	dk_controls[last_control] = malloc(sizeof(dk_control));
+	dk_controls[last_control]->id = id;
+	dk_controls[last_control]->type = type;
+	dk_controls[last_control]->left = left;
+	dk_controls[last_control]->top = top;
+	dk_controls[last_control]->right = left + width;
+	dk_controls[last_control]->bottom = top + height;
+	dk_controls[last_control]->control_data = control_data;
+	dk_controls[last_control]->control_data1 = NULL;
+	dk_controls[last_control]->control_data2 = NULL;
+	dk_controls[last_control]->control_data3 = NULL;
+	dk_controls[last_control]->control_data4 = NULL;
 	
-	show_control(cr, &dk_controls[last_control]);
+	show_control(cr, dk_controls[last_control]);
 	show_part(left, top, width, height);
-	return &dk_controls[last_control];
+	return dk_controls[last_control];
 }
 
 //              id      fsize   x       y       width   height  r   g   b
@@ -812,21 +817,25 @@ void d_set_text()
 	
 	int rcnt;
 	my_read_count(client_to_server, &d_set_text_data, sizeof(d_set_text_data), &rcnt);
-	if(rcnt == 0)
+	if(rcnt < sizeof(d_set_text_data))
 		return;
+	printf("set text for id = %u text len = %u\n", d_set_text_data.id, d_set_text_data.text_len);
 	char *new_text = NULL;
 	if(d_set_text_data.text_len > 0)
 	{
 		if(d_set_text_data.text_len > MYBUF - 1)
 			d_set_text_data.text_len = MYBUF - 1;
 		my_read_count(client_to_server, input_buf, d_set_text_data.text_len, &rcnt);
-		if(rcnt == 0)
+		if(rcnt < d_set_text_data.text_len)
+		{
+			printf("need read %u, but read %d\n", d_set_text_data.text_len, rcnt);
 			return;
+		}
 		input_buf[d_set_text_data.text_len] = 0;
 		new_text = input_buf;
 	}
 	
-	
+	printf("Read text (%d) %s\n", d_set_text_data.text_len, new_text);
 	dk_control *control = find_control(d_set_text_data.id);
 	if(control == NULL)
 	{
@@ -902,10 +911,95 @@ void draw_d_image()
 	
 	//show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
+
+void redraw_all()
+{
+	cairo_clear_all(cr);
+	for(uint8_t control_pos = 0; control_pos <= last_control; control_pos++)
+	{
+		show_control(cr, dk_controls[control_pos]);
+	}
+	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+}
+
+void free_control_mem(dk_control *control)
+{
+	if(control->control_data != NULL)
+		free(control->control_data);
+	if(control->control_data1 != NULL)
+		free(control->control_data1);
+	if(control->control_data2 != NULL)
+		free(control->control_data2);
+	if(control->control_data3 != NULL)
+		free(control->control_data3);
+	if(control->control_data4 != NULL)
+		free(control->control_data4);
+
+	free(control);
+	
+}
+
+//              id     
+// echo -e 'ddec\x01\x00' > /tmp/kedei_lcd_in
+void d_delete_control()
+{
+	printf("Delete control\n");
+	uint16_t id;
+	int rcnt;
+	my_read_count(client_to_server, &id, 2, &rcnt);
+	if(rcnt < 2)
+	{
+		printf("Not need data! read: %d, need: %d\n", rcnt, 2);
+		return;
+	}
+
+	dk_control *control = NULL;
+	uint8_t control_pos = 0;
+	for(control_pos = 0; control_pos <= last_control; control_pos++)
+	{
+		if(dk_controls[control_pos] != NULL && dk_controls[control_pos]->id == id)
+		{
+			control = dk_controls[control_pos];
+			break;
+		}
+	}
+
+	if(control == NULL)
+	{
+		printf("Control with id = %d not found!\n", id);
+		return;
+	}
+
+	free_control_mem(control);
+
+	// shift to gap
+	for(;control_pos < last_control; control_pos++)
+		dk_controls[control_pos] = dk_controls[control_pos + 1];
+	last_control--;
+
+	redraw_all();
+	
+}
+
+void d_delete_all_controls()
+{
+	printf("Delete all controls...\n");
+	if(last_control < 0)
+		return;
+	for(int control_pos = 0; control_pos <= last_control; control_pos++)
+	{
+		free_control_mem(dk_controls[control_pos]);
+	}
+	last_control = -1;
+	cairo_clear_all(cr);
+	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
+	
+}
 	
 // return: true - exit
 bool process_signature(uint8_t sig[])
 {
+	printf("\n=========  process_signature  ==========\n");
 	if(compare_signature(sig, "exit"))
 	{
 		return true;
@@ -953,6 +1047,20 @@ bool process_signature(uint8_t sig[])
 	if(compare_signature(sig, "dimg"))
 	{
 		draw_d_image();
+		return false;
+	}
+
+	// delete control
+	if(compare_signature(sig, "ddec"))
+	{
+		d_delete_control();
+		return false;
+	}
+	
+	// delete control
+	if(compare_signature(sig, "ddac"))
+	{
+		d_delete_all_controls();
 		return false;
 	}
 	
@@ -1391,7 +1499,10 @@ int main(int argc,char *argv[])
 {
 	//cairo_test();
 	//return 0;
-	
+	for(uint16_t i = 0; i < MAX_CONTROL; i++)
+	{
+		dk_controls[i] = NULL;
+	}
 	
 	uint8_t initRotation = 0;
 	int aflag = 0;
@@ -1452,7 +1563,6 @@ int main(int argc,char *argv[])
 
 	for (index = optind; index < argc; index++)
 		printf ("Non-option argument %s\n", argv[index]);
-
 
 	
 
