@@ -20,6 +20,10 @@ typedef enum
 	COL_LO_COLOR_2
 }std_colors_t;
 
+struct panel_data_tag
+{
+	hex_color_t bg_color;
+};
 
 
 struct label_data_tag
@@ -49,8 +53,8 @@ void cairo_clear_all(cairo_t *cr);
 int cairo_test (cairo_t *cr);
 void cairo_line(cairo_t *cr, double stroke_width, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, hex_color_t color);
 void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text, hex_color_t color);
-void show_control(cairo_t *cr, dk_control *control);
-void set_text(cairo_t *cr, dk_control *control, char *text);
+control_position_t show_control(cairo_t *cr, dk_control *control);
+control_position_t set_text(cairo_t *cr, dk_control *control, char *text);
 void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
 						hex_color_t *color,
 						hex_color_t *bg_color,

@@ -51,10 +51,23 @@ typedef enum
 	CT_PANEL = 200 // container!
 }control_types;
 
+typedef struct
+{
+	uint16_t left;
+	uint16_t top;
+	uint16_t width;
+	uint16_t height;
+	
+}control_position_t;
+
+#define UNDEF_POS_VAL UINT16_MAX
+#define UNDEF_CONTROL_POS ((control_position_t){ UNDEF_POS_VAL, UNDEF_POS_VAL, UNDEF_POS_VAL, UNDEF_POS_VAL })
+
 
 typedef struct 
 {
 	uint16_t id;
+	uint16_t parent_id;
 	control_types type;
 	uint16_t left;
 	uint16_t top;
@@ -79,5 +92,6 @@ dk_control *add_control(uint16_t id, uint16_t parent_id, control_types type,
 	void *control_data);
 bool delete_control(uint16_t id);
 bool delete_all_controls();
+control_position_t get_abs_control_pos(dk_control *control);
 
 #endif

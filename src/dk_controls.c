@@ -42,9 +42,6 @@ void free_control_mem(dk_control *control)
 		free(control->control_data3);
 	if(control->control_data4 != NULL)
 		free(control->control_data4);
-
-	free(control);
-	
 }
 
 void clearArray(ControlArray *a)
@@ -159,6 +156,7 @@ dk_control *add_control(uint16_t id, uint16_t parent_id, control_types type,
 	printf("Parent OK\n");
 	dk_control control;	
 	control.id = id;
+	control.parent_id = parent_id;
 	control.type = type;
 	control.left = left;
 	control.top = top;
@@ -189,3 +187,26 @@ bool delete_all_controls()
 	clearArray(&root_controls);
 	return true;
 }
+
+control_position_t get_abs_control_pos(dk_control *control)
+{
+	control_position_t abs_pos;
+	abs_pos.left = control->left;
+	abs_pos.top = control->top;
+	abs_pos.width = control->width;
+	abs_pos.height = control->height;
+
+	while(control->parent_id > 0)
+	{
+		control = find_control(control->parent_id);
+		if(control == NULL)
+		{
+			printf("Parent error!\n");
+			break;
+		}
+		abs_pos.left += control->left;
+		abs_pos.top += control->top;
+	}
+	return abs_pos;
+}
+

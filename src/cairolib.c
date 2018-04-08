@@ -351,41 +351,95 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 	cairo_restore (cr);
 }
 
-void draw_dk_label(cairo_t *cr, dk_control *control)
+control_position_t draw_dk_panel(cairo_t *cr, dk_control *control)
+{
+	cairo_save (cr);
+
+	control_position_t abs_pos = get_abs_control_pos(control);
+
+	cairo_rectangle (cr, abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
+
+	struct panel_data_tag *panel_data = ((struct panel_data_tag *)control->control_data);
+	cairo_set_source_rgb (cr, 
+			panel_data->bg_color.r / 255.0, 
+			panel_data->bg_color.g / 255.0, 
+			panel_data->bg_color.b / 255.0);
+
+	cairo_stroke_preserve(cr);
+	cairo_fill(cr);
+	
+	
+    cairo_restore (cr);
+    return abs_pos;
+}
+
+control_position_t draw_dk_label(cairo_t *cr, dk_control *control)
 {
 	//cairo_text_extents_t extents;
 	cairo_save (cr);
 	
 	//printf("cairo draw_label left = %u, top = %u, right = %u, bottom = %u\n",
 	//	control->left,  control->top, control->right, control->bottom);
+	control_position_t abs_pos = get_abs_control_pos(control);
+	printf("Abs Pos: left = %u, top = %u, width = %u, height = %u\n",
+		abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
+
+	hex_color_t *bg_color = get_std_color(COL_BG_COLOR);
+	// Determine bg color
+	if(control->parent_id != 0)
+	{
+		dk_control *parent_control = find_control(control->parent_id);
+		if(parent_control != NULL)
+		{
+			cairo_rectangle (cr, parent_control->left, parent_control->top, parent_control->width, parent_control->height);
+			cairo_clip (cr);
+			
+			if(parent_control->type == CT_PANEL)
+			{
+				bg_color = &((struct panel_data_tag *)parent_control->control_data)->bg_color;
+				printf("Determined bg color: r = %u, g = %u, b = %u\n",
+					bg_color->r, bg_color->g, bg_color->b);
+			}
+		}
+		else
+		{
+			printf("Error find parent control!\n");
+		}
+	}
 
 	draw_text_in_rect(cr, ((struct label_data_tag *)control->control_data)->font_size,
-				control->left, control->top,
-                 control->width, control->height,
+				abs_pos.left, abs_pos.top,
+                 abs_pos.width, abs_pos.height,
                  &((struct label_data_tag *)control->control_data)->color,
-                 get_std_color(COL_BG_COLOR),
+                 bg_color,
                  ((struct label_data_tag *)control->control_data)->text);
 		
     cairo_restore (cr);
+    return abs_pos;
 }
 
-void draw_dk_text_box(cairo_t *cr, dk_control *control)
+control_position_t draw_dk_text_box(cairo_t *cr, dk_control *control)
 {
 	//cairo_text_extents_t extents;
 	cairo_save (cr);
 	
 	printf("cairo draw_text_box left = %u, top = %u, width = %u, height = %u\n",
 		control->left,  control->top, control->width, control->height);
-	bevel_box (cr, control->left, control->top, control->width, control->height);
 
+	control_position_t abs_pos = get_abs_control_pos(control);
+	printf("Abs Pos: left = %u, top = %u, width = %u, height = %u\n",
+		abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
+	bevel_box (cr, abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
+	
 	draw_text_in_rect(cr, ((struct text_box_data_tag *)control->control_data)->font_size,
-				control->left + 3, control->top + 3,
-                 control->width - 6, control->height - 6,
+				abs_pos.left + 3, abs_pos.top + 3,
+                 abs_pos.width - 6, abs_pos.height - 6,
                  &((struct text_box_data_tag *)control->control_data)->color,
                  get_std_color(COL_HI_COLOR_1),
                  ((struct text_box_data_tag *)control->control_data)->text);
 		
     cairo_restore (cr);
+    return abs_pos;
 }
 
 typedef struct
@@ -411,13 +465,14 @@ static cairo_status_t read_png_stream_from_byte_array (void *in_closure, uint8_t
     return CAIRO_STATUS_SUCCESS;
 }
 
-void draw_dk_image(cairo_t *cr, dk_control *control)
+control_position_t draw_dk_image(cairo_t *cr, dk_control *control)
 {
 	//cairo_text_extents_t extents;
 	cairo_save (cr);
 	
 	//printf("cairo draw_dk_image left = %u, top = %u, right = %u, bottom = %u\n",
 	//	control->left,  control->top, control->right, control->bottom);
+	control_position_t abs_pos = get_abs_control_pos(control);
 
 	struct dk_image_data_tag *dk_image_data = control->control_data;
 	
@@ -432,8 +487,8 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 	//printf("Control width: %u, height: %u\n", width, height);
 	
 	//cairo_rectangle (cr, control->left, control->top, width, height);
-	cairo_translate(cr, control->left, control->top);
-	cairo_rectangle (cr, 0, 0, control->width, control->height);
+	cairo_translate(cr, abs_pos.left, abs_pos.top);
+	cairo_rectangle (cr, 0, 0, abs_pos.width, abs_pos.height);
 	cairo_clip (cr);
 	cairo_new_path (cr); /* path not consumed by clip()*/
 
@@ -451,36 +506,36 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 	switch(dk_image_data->scale_type)
 	{
 		case 1: //1 - fit width
-			scale_y = scale_x = control->width / img_width;
+			scale_y = scale_x = abs_pos.width / img_width;
 			break;
 		case 2:// - fit height
-			scale_y = scale_x = control->height / img_height;
+			scale_y = scale_x = abs_pos.height / img_height;
 			break;
 		case 3:// - fit on max dimension
-			scale_x = control->width / img_width;
-			scale_y = control->height / img_height;
+			scale_x = abs_pos.width / img_width;
+			scale_y = abs_pos.height / img_height;
 			if(scale_x > scale_y)
 				scale_y = scale_x;
 			else
 				scale_x = scale_y;
 			break;
 		case 4:// - fit on min dimension
-			scale_x = control->width / img_width;
-			scale_y = control->height / img_height;
+			scale_x = abs_pos.width / img_width;
+			scale_y = abs_pos.height / img_height;
 			if(scale_x < scale_y)
 				scale_y = scale_x;
 			else
 				scale_x = scale_y;
 			break;
 		case 5:// - stretch
-			scale_x = control->width / img_width;
-			scale_y = control->height / img_height;
+			scale_x = abs_pos.width / img_width;
+			scale_y = abs_pos.height / img_height;
 			break;
 	}
 
 	
-	off_x = -(img_width * scale_x - control->width) / 2 / scale_x;
-	off_y = -(img_height * scale_y - control->height) / 2 / scale_y;
+	off_x = -(img_width * scale_x - abs_pos.width) / 2 / scale_x;
+	off_y = -(img_height * scale_y - abs_pos.height) / 2 / scale_y;
 
 	//printf("Image scale_type = %u, scale_x = %f, scale_y = %f, off_x = %f, off_y = %f\n", dk_image_data->scale_type, scale_x, scale_y, off_x, off_y);
 	cairo_scale (cr, scale_x, scale_y);
@@ -488,6 +543,7 @@ void draw_dk_image(cairo_t *cr, dk_control *control)
 	cairo_paint (cr);
 	cairo_surface_destroy(image);	
     cairo_restore (cr);
+    return abs_pos;
 }
 
 void cairo_clear_all(cairo_t *cr)
@@ -498,15 +554,15 @@ void cairo_clear_all(cairo_t *cr)
 	
 }
 
-void show_control(cairo_t *cr, dk_control *control)
+control_position_t show_control(cairo_t *cr, dk_control *control)
 {
 	switch(control->type)
 	{
 		case CT_LABEL:
-			draw_dk_label(cr, control);
+			return draw_dk_label(cr, control);
 			break;
 		case CT_TEXT_BOX:
-			draw_dk_text_box(cr, control);
+			return draw_dk_text_box(cr, control);
 			break;
 	
 		case CT_FINGER_TEXT_BOX:
@@ -535,11 +591,13 @@ void show_control(cairo_t *cr, dk_control *control)
 			break;
 
 		case CT_STATIC_IMAGE:
-			draw_dk_image(cr, control);
+			return draw_dk_image(cr, control);
 			break;
 		case CT_PANEL:
+			return draw_dk_panel(cr, control);
 			break;
 	}
+	return UNDEF_CONTROL_POS;
 }
 
 bool change_text(char **old, char *new)
@@ -588,37 +646,39 @@ bool change_text(char **old, char *new)
 	return true;
 }
 
-void label_set_text(cairo_t *cr, dk_control *control, char *text)
+control_position_t label_set_text(cairo_t *cr, dk_control *control, char *text)
 {
 	//printf("label_set_text\n");
 	if(change_text(&((struct label_data_tag *)control->control_data)->text, text))
 	{
 		//printf("draw_dk_labeldraw_dk_label new text = %s\n", ((struct label_data_tag *)control->control_data)->text);
-		draw_dk_label(cr, control);
+		return draw_dk_label(cr, control);
 	}
 	else
 	{
 		printf("Error changing text!\n");
 	}
+	return UNDEF_CONTROL_POS;
 }
 
-void text_box_set_text(cairo_t *cr, dk_control *control, char *text)
+control_position_t text_box_set_text(cairo_t *cr, dk_control *control, char *text)
 {
 	if(change_text(&((struct text_box_data_tag *)control->control_data)->text, text))
 	{
-		draw_dk_text_box(cr, control);
+		return draw_dk_text_box(cr, control);
 	}
+	return UNDEF_CONTROL_POS;
 }
 
-void set_text(cairo_t *cr, dk_control *control, char *text)
+control_position_t set_text(cairo_t *cr, dk_control *control, char *text)
 {
 		switch(control->type)
 	{
 		case CT_LABEL:
-			label_set_text(cr, control, text);
+			return label_set_text(cr, control, text);
 			break;
 		case CT_TEXT_BOX:
-			text_box_set_text(cr, control, text);
+			return text_box_set_text(cr, control, text);
 			break;
 	
 		case CT_FINGER_TEXT_BOX:
@@ -650,5 +710,6 @@ void set_text(cairo_t *cr, dk_control *control, char *text)
 		case CT_PANEL:
 			break;
 	}
+	return UNDEF_CONTROL_POS;
 
 }

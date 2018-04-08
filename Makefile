@@ -1,4 +1,4 @@
-CC=gcc
+CC=gcc -std=gnu11
 BFLAGS=-Wall
 CFLAGS=-c -Wall `pkg-config --cflags libconfig`
 BOUT=-o "./dist/lcdout"

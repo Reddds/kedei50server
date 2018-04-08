@@ -659,10 +659,10 @@ dk_control *add_control_and_show(uint16_t id, uint16_t parent_id, control_types 
 	void *control_data)
 {
 	printf("Adding control\n");
-	if(width == 0 || height == 0
-		|| left + width > LCD_WIDTH
-		|| top + height > LCD_HEIGHT)
-		return NULL;
+	//if(width == 0 || height == 0
+	//	|| left + width > LCD_WIDTH
+	//	|| top + height > LCD_HEIGHT)
+	//	return NULL;
 
 	dk_control *control = add_control(id, parent_id, type, left, top, width, height, control_data);
 	if(control == NULL)
@@ -671,11 +671,17 @@ dk_control *add_control_and_show(uint16_t id, uint16_t parent_id, control_types 
 		return NULL;
 	}
 	
-	show_control(cr, control);
+	control_position_t abs_pos = show_control(cr, control);
+	if(abs_pos.left == UNDEF_POS_VAL)
+	{
+		printf("Error abs pos!!!\n");
+		return NULL;
+
+	}
 
 	my_write_event(id, "crok");	
 	
-	show_part(left, top, width, height);
+	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
 	return control;
 }
 
@@ -684,48 +690,49 @@ dk_control *add_control_and_show(uint16_t id, uint16_t parent_id, control_types 
 void draw_d_label()
 {
 	printf("draw_d_text_box\n");
-	struct __attribute__((__packed__)) d_text_box_data_tag
+	struct __attribute__((__packed__)) //d_text_box_data_tag
 	{
 		uint16_t id;
-		uint16_t font_size;
+		uint16_t parent_id;
 		uint16_t x;
 		uint16_t y;
 		uint16_t width;
 		uint16_t height;
+		uint16_t font_size;
 		uint8_t r;
 		uint8_t g;
 		uint8_t b;
 		uint16_t text_len;
-	}d_text_box_data;
+	}d_label_data;
 	
 	
 	
 	//struct __attribute__((__packed__)) d_text_box_data_tag *d_text_box_data = (struct __attribute__((__packed__)) d_text_box_data_tag*)malloc(sizeof(struct __attribute__((__packed__)) d_text_box_data_tag));
 	
 	int rcnt;
-	my_read_count(client_to_server, &d_text_box_data, sizeof(d_text_box_data), &rcnt);
-	if(rcnt == 0)
+	my_read_count(client_to_server, &d_label_data, sizeof(d_label_data), &rcnt);
+	if(rcnt < sizeof(d_label_data))
 		return;
-	if(d_text_box_data.text_len > 0)
+	if(d_label_data.text_len > 0)
 	{
-		if(d_text_box_data.text_len > MYBUF - 1)
-			d_text_box_data.text_len = MYBUF - 1;
-		my_read_count(client_to_server, input_buf, d_text_box_data.text_len, &rcnt);
+		if(d_label_data.text_len > MYBUF - 1)
+			d_label_data.text_len = MYBUF - 1;
+		my_read_count(client_to_server, input_buf, d_label_data.text_len, &rcnt);
 		if(rcnt == 0)
 			return;
-		input_buf[d_text_box_data.text_len] = 0;
+		input_buf[d_label_data.text_len] = 0;
 	}
 	
 	printf("id = %u, font_size = %u, x = %u, y = %u, width = %u, height = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
-		d_text_box_data.id, d_text_box_data.font_size, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, 
-		d_text_box_data.r, d_text_box_data.g, d_text_box_data.b, d_text_box_data.text_len,
+		d_label_data.id, d_label_data.font_size, d_label_data.x, d_label_data.y, d_label_data.width, d_label_data.height, 
+		d_label_data.r, d_label_data.g, d_label_data.b, d_label_data.text_len,
 		input_buf);	
 	
 	struct label_data_tag *text_box_data = (struct label_data_tag*)malloc(sizeof(struct label_data_tag));
-	text_box_data->font_size = d_text_box_data.font_size;
-	text_box_data->color.r = d_text_box_data.r;
-	text_box_data->color.g = d_text_box_data.g;
-	text_box_data->color.b = d_text_box_data.b;
+	text_box_data->font_size = d_label_data.font_size;
+	text_box_data->color.r = d_label_data.r;
+	text_box_data->color.g = d_label_data.g;
+	text_box_data->color.b = d_label_data.b;
 	
 	uint16_t slen = strlen(input_buf);
 	if(slen > 0)
@@ -738,35 +745,35 @@ void draw_d_label()
 		text_box_data->text = NULL;
 	}
 	
-	add_control_and_show(d_text_box_data.id, 0, CT_LABEL, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
+	add_control_and_show(d_label_data.id, d_label_data.parent_id, CT_LABEL,
+		d_label_data.x, d_label_data.y, d_label_data.width, d_label_data.height, text_box_data);
 }
 
-//              id      fsize   x       y       width   height  r   g   b
-// echo -e 'dtbx\x01\x00\x20\x00\x60\x00\x50\x00\x60\x00\x24\x00\x11\x80\x13\x05\x00Hello' > /tmp/kedei_lcd_in
+//              id      parent_id x       y       width   height  fsize     r   g   b
+// echo -e 'dtbx\x01\x00\0x00\0x00\x60\x00\x50\x00\x60\x00\x24\x00\x20\x00\x11\x80\x13\x05\x00Hello' > /tmp/kedei_lcd_in
 void draw_d_text_box()
 {
 	printf("draw_d_text_box\n");
 	struct __attribute__((__packed__)) d_text_box_data_tag
 	{
 		uint16_t id;
-		uint16_t font_size;
+		uint16_t parent_id;
 		uint16_t x;
 		uint16_t y;
 		uint16_t width;
 		uint16_t height;
+		uint16_t font_size;
 		uint8_t r;
 		uint8_t g;
 		uint8_t b;
 		uint16_t text_len;
 	}d_text_box_data;
-	
-	
-	
+
 	//struct __attribute__((__packed__)) d_text_box_data_tag *d_text_box_data = (struct __attribute__((__packed__)) d_text_box_data_tag*)malloc(sizeof(struct __attribute__((__packed__)) d_text_box_data_tag));
 	
 	int rcnt;
 	my_read_count(client_to_server, &d_text_box_data, sizeof(d_text_box_data), &rcnt);
-	if(rcnt == 0)
+	if(rcnt < sizeof(d_text_box_data))
 		return;
 	if(d_text_box_data.text_len > 0)
 	{
@@ -778,8 +785,8 @@ void draw_d_text_box()
 		input_buf[d_text_box_data.text_len] = 0;
 	}
 	
-	printf("id = %u, font_size = %u, x = %u, y = %u, width = %u, height = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
-		d_text_box_data.id, d_text_box_data.font_size, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, 
+	printf("id = %u, parent_id = %u, font_size = %u, x = %u, y = %u, width = %u, height = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
+		d_text_box_data.id, d_text_box_data.parent_id, d_text_box_data.font_size, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, 
 		d_text_box_data.r, d_text_box_data.g, d_text_box_data.b, d_text_box_data.text_len,
 		input_buf);	
 	
@@ -800,10 +807,40 @@ void draw_d_text_box()
 		text_box_data->text = NULL;
 	}
 	
-	add_control_and_show(d_text_box_data.id, 0, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
+	add_control_and_show(d_text_box_data.id, d_text_box_data.parent_id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
 }
 
+void  draw_d_panel()
+{
+	printf("draw_d_panel\n");
+	struct __attribute__((__packed__)) d_panel_data_tag
+	{
+		uint16_t id;
+		uint16_t parent_id;
+		uint16_t x;
+		uint16_t y;
+		uint16_t width;
+		uint16_t height;		
+		uint8_t r; 
+		uint8_t g;
+		uint8_t b;
+	}d_panel_data;
 
+	int rcnt;
+	my_read_count(client_to_server, &d_panel_data, sizeof(d_panel_data), &rcnt);
+	if(rcnt < sizeof(d_panel_data))
+		return;
+
+	struct panel_data_tag *panel_data = (struct panel_data_tag*)malloc(sizeof(struct panel_data_tag));
+	panel_data->bg_color.r = d_panel_data.r;
+	panel_data->bg_color.g = d_panel_data.g;
+	panel_data->bg_color.b = d_panel_data.b;
+	
+	add_control_and_show(d_panel_data.id, d_panel_data.parent_id, CT_PANEL,
+		d_panel_data.x, d_panel_data.y, d_panel_data.width, d_panel_data.height,
+		panel_data);
+
+}
 //              id     
 // echo -e 'dstx\x01\x00\x05\x00World' > /tmp/kedei_lcd_in
 void d_set_text()
@@ -843,8 +880,14 @@ void d_set_text()
 		return;
 	}
 	
-	set_text(cr, control, new_text);
-	show_part(control->left, control->top, control->width, control->height);
+	control_position_t abs_pos = set_text(cr, control, new_text);
+	if(abs_pos.left == UNDEF_POS_VAL)
+	{
+		printf("Error abs pos!!!\n");
+		return;
+
+	}
+	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
 }
 
 
@@ -867,6 +910,7 @@ void draw_d_image()
 	struct __attribute__((__packed__))
 	{
 		uint16_t id;
+		uint16_t parent_id;
 		uint16_t x;
 		uint16_t y;
 		uint16_t width;
@@ -903,7 +947,7 @@ void draw_d_image()
 	dk_image_data->image_len = d_image_data.image_len;
 	dk_image_data->image_data = image_src;
 
-	if(!add_control_and_show(d_image_data.id, 0, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
+	if(!add_control_and_show(d_image_data.id, d_image_data.parent_id, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
 		d_image_data.width, d_image_data.height, dk_image_data))
 	{
 		free(image_src);
@@ -995,6 +1039,13 @@ bool process_signature(uint8_t sig[])
 		draw_d_text_box();
 		return false;
 	}
+
+	// panel
+	if(compare_signature(sig, "dpan"))
+	{
+		draw_d_panel();
+		return false;
+	}
 	
 	// commands
 	// set text
@@ -1024,6 +1075,7 @@ bool process_signature(uint8_t sig[])
 		d_delete_all_controls();
 		return false;
 	}
+
 	
 	
 	//int read_buf_pos = 0;
