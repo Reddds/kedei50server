@@ -365,7 +365,7 @@ control_position_t draw_dk_panel(cairo_t *cr, dk_control *control)
 			panel_data->bg_color.g / 255.0, 
 			panel_data->bg_color.b / 255.0);
 
-	cairo_stroke_preserve(cr);
+	//cairo_stroke_preserve(cr);
 	cairo_fill(cr);
 	
 	

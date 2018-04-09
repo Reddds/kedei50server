@@ -1915,25 +1915,25 @@ void get_date_time_format_str()
 
 	switch(date_time_time_fmt)
 	{
-		//  5:05:46 PM
+		//  17:05:46 
 		case DT_TM_HH_0MM_0SS:
-			time_format_str = "%H:%M:%S %p";
+			time_format_str = "%H:%M:%S";
 			dt_show_seconds = true;
 			break;
-		//  17:05:46
+		//  5:05:46 PM
 		case DT_TM_II_0MM_0SS:
-			time_format_str = "%I:%M:%S";
+			time_format_str = "%I:%M:%S %p";
 			dt_show_seconds = true;
 			break;
 			
-		//  5:05 PM
+		//  17:05
 		case DT_TM_HH_0MM:
-			time_format_str = "%H:%M %p";
+			time_format_str = "%H:%M";
 			dt_show_seconds = false;
 			break;
-		//  17:05
+		//  5:05 PM
 		case DT_TM_II_0MM:
-			time_format_str = "%I:%M";
+			time_format_str = "%I:%M %p";
 			dt_show_seconds = false;
 			break;
 	}
@@ -2075,7 +2075,7 @@ void* doTimeShow(void *arg)
 //    {
 //        printf("\n Second thread processing\n");
 //    }
-	char buf[100];
+	char dt_buf[100];
 	//buf[8] = 0;
 	uint8_t last_second = 100;
 	uint8_t last_minute = 100;
@@ -2116,9 +2116,9 @@ void* doTimeShow(void *arg)
 			case DT_COMB_ONLY_TIME:
 				if(time_control == NULL)
 					continue;
-				strftime(buf, sizeof(buf), time_format_str, tm);
+				strftime(dt_buf, sizeof(dt_buf), time_format_str, tm);
 				pthread_mutex_lock(&lock_draw);
-				local_set_text(time_control, buf);
+				local_set_text(time_control, dt_buf);
 				pthread_mutex_unlock(&lock_draw);
 				break;
 			// time in time_id, date in date_id
@@ -2126,11 +2126,11 @@ void* doTimeShow(void *arg)
 				if(time_control == NULL || date_control == NULL)
 					continue;
 				pthread_mutex_lock(&lock_draw);
-				strftime(buf, sizeof(buf), time_format_str, tm);
-				local_set_text(time_control, buf);
+				strftime(dt_buf, sizeof(dt_buf), time_format_str, tm);
+				local_set_text(time_control, dt_buf);
 				if(last_day != tm->tm_mday)
 				{
-					int stres = strftime(buf, sizeof(buf), date_format_str, tm);
+					int stres = strftime(dt_buf, sizeof(dt_buf), date_format_str, tm);
 					if(stres <= 0)
 					{
 						printf("Date string len = 0\n");
@@ -2138,8 +2138,8 @@ void* doTimeShow(void *arg)
 					}
 					else
 					{
-						printf("date = %s\n", buf);
-						local_set_text(date_control, buf);
+						printf("date = %s\n", dt_buf);
+						local_set_text(date_control, dt_buf);
 					}
 				}
 				pthread_mutex_unlock(&lock_draw);
@@ -2151,18 +2151,18 @@ void* doTimeShow(void *arg)
 				if(last_day == tm->tm_mday)
 					continue;
 				last_day = tm->tm_mday;
-				strftime(buf, sizeof(buf), date_format_str, tm);
+				strftime(dt_buf, sizeof(dt_buf), date_format_str, tm);
 				pthread_mutex_lock(&lock_draw);
-				local_set_text(date_control, buf);
+				local_set_text(date_control, dt_buf);
 				pthread_mutex_unlock(&lock_draw);
 				break;
 			case DT_COMB_TIME_BEFORE_DATE:
 			case DT_COMB_DATE_BEFORE_TIME:
 				if(time_control == NULL)
 					continue;
-				strftime(buf, sizeof(buf), date_time_format_str, tm);
+				strftime(dt_buf, sizeof(dt_buf), date_time_format_str, tm);
 				pthread_mutex_lock(&lock_draw);
-				local_set_text(time_control, buf);
+				local_set_text(time_control, dt_buf);
 				pthread_mutex_unlock(&lock_draw);
 				last_day = tm->tm_mday;
 				break;
