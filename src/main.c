@@ -38,6 +38,7 @@
 #include <time.h>
 #include <pwd.h>
 #include <libconfig.h>
+#include <locale.h>
 
 //cairo
 #include <cairo.h>
@@ -1130,6 +1131,14 @@ void d_delete_control()
 		return;
 	}
 
+	if(time_control != NULL && time_control->id == id)
+	{
+		time_control = NULL;
+	}
+	if(date_control != NULL && date_control->id == id)
+	{
+		date_control = NULL;
+	}
 	if(!delete_control(id))
 	{
 		printf("Eror deleting control with id = %d!\n", id);
@@ -1143,6 +1152,15 @@ void d_delete_control()
 void d_delete_all_controls()
 {
 	printf("Delete all controls...\n");
+	if(time_control != NULL)
+	{
+		time_control = NULL;
+	}
+	if(date_control != NULL)
+	{
+		date_control = NULL;
+	}
+
 	delete_all_controls();
 	cairo_clear_all(cr);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
@@ -1739,9 +1757,19 @@ int main(int argc,char *argv[])
 		return EXIT_FAILURE;
 	}
 	//return EXIT_SUCCESS;
-
-	
-
+	//! Edit /etc/locale.gen and uncomment
+	//! sudo locale-gen ru_RU
+	printf("Set locale ... ");
+	char *lres = setlocale( LC_ALL, "ru_RU.UTF-8" );
+	if(lres == NULL)
+	{
+		printf("Error\n");
+		perror("Set locale");
+	}
+	else
+	{
+		printf("%s\n", lres);
+	}
 
 	printf ("Open LCD\n");
 	//delayms(3000);
@@ -1889,7 +1917,7 @@ void get_date_time_format_str()
 	{
 		//  5:05:46 PM
 		case DT_TM_HH_0MM_0SS:
-			time_format_str = "%H:%M:%S";
+			time_format_str = "%H:%M:%S %p";
 			dt_show_seconds = true;
 			break;
 		//  17:05:46
@@ -1900,7 +1928,7 @@ void get_date_time_format_str()
 			
 		//  5:05 PM
 		case DT_TM_HH_0MM:
-			time_format_str = "%H:%M";
+			time_format_str = "%H:%M %p";
 			dt_show_seconds = false;
 			break;
 		//  17:05
@@ -2049,20 +2077,38 @@ void* doTimeShow(void *arg)
 //    }
 	char buf[100];
 	//buf[8] = 0;
+	uint8_t last_second = 100;
+	uint8_t last_minute = 100;
+	uint8_t last_day = 100;
+
+	//locale_t locale = newlocale(LC_TIME_MASK, const char * locale, locale_t base);
 	
 	while(true)//!!!!!!
 	{
-		sleep(1);
+		usleep(200000);
 		if(need_change_time_format)
 		{
 			need_change_time_format = false;
 			get_date_time_format_str();
+			last_minute = 100;
+			last_day = 100;			
 		}
 		if(time_control == NULL && date_control == NULL)
 			continue;
 		time_t t = time(NULL);
 		struct tm *tm = localtime(&t);
 
+		if(last_second == tm->tm_sec)
+			continue;
+		last_second = tm->tm_sec;
+		// If not need to show seconds
+		// Show time on minute change
+		if(!dt_show_seconds && tm->tm_min == last_minute)
+		{
+			continue;
+		}
+		last_minute = tm->tm_min;
+		
 		switch(date_time_comb)
 		{
 			case DT_COMB_NONE:
@@ -2082,13 +2128,29 @@ void* doTimeShow(void *arg)
 				pthread_mutex_lock(&lock_draw);
 				strftime(buf, sizeof(buf), time_format_str, tm);
 				local_set_text(time_control, buf);
-				strftime(buf, sizeof(buf), date_format_str, tm);
-				local_set_text(date_control, buf);
+				if(last_day != tm->tm_mday)
+				{
+					int stres = strftime(buf, sizeof(buf), date_format_str, tm);
+					if(stres <= 0)
+					{
+						printf("Date string len = 0\n");
+						perror("Error Date string");
+					}
+					else
+					{
+						printf("date = %s\n", buf);
+						local_set_text(date_control, buf);
+					}
+				}
 				pthread_mutex_unlock(&lock_draw);
+				last_day = tm->tm_mday;
 				break;
 			case DT_COMB_ONLY_DATE:
 				if(date_control == NULL)
 					continue;
+				if(last_day == tm->tm_mday)
+					continue;
+				last_day = tm->tm_mday;
 				strftime(buf, sizeof(buf), date_format_str, tm);
 				pthread_mutex_lock(&lock_draw);
 				local_set_text(date_control, buf);
@@ -2102,6 +2164,7 @@ void* doTimeShow(void *arg)
 				pthread_mutex_lock(&lock_draw);
 				local_set_text(time_control, buf);
 				pthread_mutex_unlock(&lock_draw);
+				last_day = tm->tm_mday;
 				break;
 		}
 		i++;
