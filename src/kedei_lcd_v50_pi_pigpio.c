@@ -624,51 +624,52 @@ bool get_touch_value(uint8_t cmd, uint8_t *b1, uint8_t *b2)
 	return true;
 }
 
-void get_sensor_values()
+// if determine value, return true
+bool get_sensor_values()
 {
 	uint8_t b1, b2;
 	uint16_t tmp_touch_x = 0;
 	uint16_t tmp_touch_y = 0;
-	/*uint16_t touch_z1_val = 0;
+	uint16_t touch_z1_val = 0;
 	uint16_t touch_z2_val = 0;
 
 	if(!get_touch_value(touch_z1, &b1, &b2))
 	{
-		return;
+		return false;
 	}
 	touch_z1_val = (b1 << 1) | (b2 >> 7);
 	if(!get_touch_value(touch_z2, &b1, &b2))
 	{
-		return;
+		return false;
 	}
 	touch_z2_val = (b1 << 1) | (b2 >> 7);
-	if(touch_z2_val - touch_z1_val < touch_sensitivity)
-		return;
-	*/
+	if(touch_z2_val - touch_z1_val > touch_sensitivity)
+		return false;
+	
 	
 	if(!get_touch_value(chx, &b1, &b2))
 	{
-		return;
+		return false;
 	}
 	tmp_touch_x = ((b1<< 5) | (b2 >> 3));
 	if(tmp_touch_x == 0 || tmp_touch_x == 4095)
 	{
 		skip_alerts++;
-		return;
+		return false;
 	}
 
-	usleep(100);
+	//usleep(100);
 	
 	if(!get_touch_value(chy, &b1, &b2))
 	{
-		return;
+		return false;
 	}
 	tmp_touch_y = 4095 - ((b1<< 5) | (b2 >> 3)); //4095
 	
 	if(tmp_touch_y == 0 || tmp_touch_y == 4095)
 	{
 		skip_alerts++;
-		return;
+		return false;
 	}
 
 	touch_raw_x = tmp_touch_x;
@@ -720,6 +721,7 @@ void get_sensor_values()
 
 	//printf("Receive Y = %u [%02X %02X %02X]\n", touch_y, buff_rx[0], buff_rx[1], buff_rx[2]);
 	skip_alerts = 0;
+	return true;
 }
 
 volatile uint32_t last_tick = 0;
@@ -789,7 +791,7 @@ void* do_sensor_thread(void *arg)
 	return NULL;
 	while(true)
 	{
-		usleep(10000);
+		usleep(100);
 		int level = gpioRead(SENSOR_IRQ_PIN);
 		if(level == PI_TIMEOUT)
 			continue;
@@ -799,7 +801,8 @@ void* do_sensor_thread(void *arg)
 
 		if(false && level == PI_LOW)
 		{
-			get_sensor_values();
+			if(get_sensor_values())
+				usleep(10000);
 		}
 	}
 
