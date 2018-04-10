@@ -97,7 +97,7 @@ cairo_t *cr;
 cairo_surface_t *surface;
 
 pthread_t tid[2];
-bool my_write_event(uint16_t id, char *name);
+bool my_write_event(uint32_t event_id, uint16_t id, char *name);
 
 pthread_mutex_t lock_draw;
 pthread_mutex_t lock_fifo_write;
@@ -160,38 +160,51 @@ bool my_read(int fdesc, void *buf, int count)
 	return my_read_count(fdesc, buf, count, &rcnt);
 }
 
-bool my_write(void *buf, int count)
+bool my_write(void *buf, int count, bool isLock)
 {
 	if(server_to_client < 0)
 		return false;
-	pthread_mutex_lock(&lock_fifo_write);
+	if(isLock)
+		pthread_mutex_lock(&lock_fifo_write);
 	write(server_to_client, buf, count);
-	pthread_mutex_unlock(&lock_fifo_write);
+	if(isLock)
+		pthread_mutex_unlock(&lock_fifo_write);
 	return true;
 }
 
-bool my_write_event_with_add(uint16_t id, char *name, void *additional, uint16_t count)
+bool my_write_event_with_add(uint32_t event_id, uint16_t id, char *name, void *additional, uint16_t count)
 {
 	if(strlen(name) != 4)
 	{
 		printf("Event name len not 4!\n");
 		return false;
 	}
-	uint8_t outbuf[8];
-	memcpy(outbuf, &id, 2);
-	memcpy(&outbuf[2], name, 4);
-	memcpy(&outbuf[6], &count, 2);
-	if(!my_write(outbuf, sizeof(outbuf)))
+	uint8_t outbuf[12];
+	memcpy(outbuf, &event_id, 4);
+	memcpy(&outbuf[4], &id, 2);
+	memcpy(&outbuf[6], name, 4);
+	memcpy(&outbuf[10], &count, 2);
+	pthread_mutex_lock(&lock_fifo_write);
+	if(!my_write(outbuf, sizeof(outbuf), false))
+	{
+		printf("Error writing event headr!\n");
+		pthread_mutex_unlock(&lock_fifo_write);
 		return false;
+	}
 	if(count > 0)
-		if(!my_write(additional, count))
+		if(!my_write(additional, count, false))
+		{
+			printf("Error writing event additional data!\n");
+			pthread_mutex_unlock(&lock_fifo_write);
 			return false;
+		}
+	pthread_mutex_unlock(&lock_fifo_write);
 	return true;	
 }
 
-bool my_write_event(uint16_t id, char *name)
+bool my_write_event(uint32_t event_id, uint16_t id, char *name)
 {
-	return my_write_event_with_add(id, name, NULL, 0);
+	return my_write_event_with_add(event_id, id, name, NULL, 0);
 }
 
 
@@ -403,7 +416,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	show_part(0, 0, show_width, show_height);
 }
 
-void export_png()
+void export_png(uint32_t event_id)
 {
 	printf("Export screen to PNG '/tmp/export.png'...\n");
 	cairo_surface_write_to_png (surface, "/tmp/export.png");
@@ -514,7 +527,7 @@ void read_command_params(uint8_t cnt, char *params_name[], uint8_t params_type[]
 // sample: line w 3 x1 100 y1 300 x2 200 y2 200 r 45 g 55 b 255
 // w - strike width
 // r, g, b - color, default - black
-void draw_line()
+void draw_line(uint32_t event_id)
 {
 	uint16_t x1 = 0, x2 = 0, y1 = 0, y2 = 0, w = 1;
 	//uint8_t r = 0, g = 0, b = 0;
@@ -612,7 +625,7 @@ void draw_line()
 // sample: labl x 100 y 300 text "hello world" r 45 g 55 b 255
 // w - strike width
 // r, g, b - color, default - black
-void draw_label()
+void draw_label(uint32_t event_id)
 {
     
 	//uint16_t x1 = 0, x2 = 0, y1 = 0, y2 = 0, w = 1;
@@ -664,7 +677,7 @@ void draw_d_label()
 }*/
 
 
-dk_control *add_control_and_show(uint16_t id, uint16_t parent_id, control_types type,
+dk_control *add_control_and_show(uint32_t event_id, uint16_t id, uint16_t parent_id, control_types type,
 	uint16_t left, uint16_t top,
 	uint16_t width, uint16_t height,
 	void *control_data)
@@ -690,7 +703,7 @@ dk_control *add_control_and_show(uint16_t id, uint16_t parent_id, control_types 
 
 	}
 
-	my_write_event(id, "crok");	
+	my_write_event(event_id, id, "crok");	
 	
 	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
 	return control;
@@ -698,7 +711,7 @@ dk_control *add_control_and_show(uint16_t id, uint16_t parent_id, control_types 
 
 //              id      fsize   x       y       width   height  r   g   b
 // echo -e 'dlbl\x02\x00\x20\x00\x60\x00\x80\x00\x60\x00\x24\x00\x11\x12\x80\x05\x00Logos' > /tmp/kedei_lcd_in
-void draw_d_label()
+void draw_d_label(uint32_t event_id)
 {
 	printf("draw_d_text_box\n");
 	struct __attribute__((__packed__)) //d_text_box_data_tag
@@ -756,13 +769,13 @@ void draw_d_label()
 		text_box_data->text = NULL;
 	}
 	
-	add_control_and_show(d_label_data.id, d_label_data.parent_id, CT_LABEL,
+	add_control_and_show(event_id, d_label_data.id, d_label_data.parent_id, CT_LABEL,
 		d_label_data.x, d_label_data.y, d_label_data.width, d_label_data.height, text_box_data);
 }
 
 //              id      parent_id x       y       width   height  fsize     r   g   b
 // echo -e 'dtbx\x01\x00\0x00\0x00\x60\x00\x50\x00\x60\x00\x24\x00\x20\x00\x11\x80\x13\x05\x00Hello' > /tmp/kedei_lcd_in
-void draw_d_text_box()
+void draw_d_text_box(uint32_t event_id)
 {
 	printf("draw_d_text_box\n");
 	struct __attribute__((__packed__)) d_text_box_data_tag
@@ -818,10 +831,10 @@ void draw_d_text_box()
 		text_box_data->text = NULL;
 	}
 	
-	add_control_and_show(d_text_box_data.id, d_text_box_data.parent_id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
+	add_control_and_show(event_id, d_text_box_data.id, d_text_box_data.parent_id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
 }
 
-void  draw_d_panel()
+void  draw_d_panel(uint32_t event_id)
 {
 	printf("draw_d_panel\n");
 	struct __attribute__((__packed__)) d_panel_data_tag
@@ -847,7 +860,7 @@ void  draw_d_panel()
 	panel_data->bg_color.g = d_panel_data.g;
 	panel_data->bg_color.b = d_panel_data.b;
 	
-	add_control_and_show(d_panel_data.id, d_panel_data.parent_id, CT_PANEL,
+	add_control_and_show(event_id, d_panel_data.id, d_panel_data.parent_id, CT_PANEL,
 		d_panel_data.x, d_panel_data.y, d_panel_data.width, d_panel_data.height,
 		panel_data);
 
@@ -868,7 +881,7 @@ void local_set_text(dk_control *control, char *new_text)
 
 //              id     
 // echo -e 'dstx\x01\x00\x05\x00World' > /tmp/kedei_lcd_in
-void d_set_text()
+void d_set_text(uint32_t event_id)
 {
 	printf("set text\n");
 	struct __attribute__((__packed__))
@@ -917,7 +930,7 @@ void d_set_text()
 	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);*/
 }
 
-void d_set_time_control()
+void d_set_time_control(uint32_t event_id)
 {
 	printf("d_set_time_control\n");
 	struct __attribute__((__packed__))
@@ -968,11 +981,12 @@ void d_set_time_control()
  *  5 - stretch
 
  */
-void draw_d_image()
+void draw_d_image(uint32_t event_id)
 {
 	printf("static image\n");
 	struct __attribute__((__packed__))
 	{
+		uint32_t event_id;
 		uint16_t id;
 		uint16_t parent_id;
 		uint16_t x;
@@ -1011,7 +1025,7 @@ void draw_d_image()
 	dk_image_data->image_len = d_image_data.image_len;
 	dk_image_data->image_data = image_src;
 
-	if(!add_control_and_show(d_image_data.id, d_image_data.parent_id, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
+	if(!add_control_and_show(event_id, d_image_data.id, d_image_data.parent_id, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
 		d_image_data.width, d_image_data.height, dk_image_data))
 	{
 		free(image_src);
@@ -1034,7 +1048,7 @@ void redraw_all()
 
 //              id     
 // echo -e 'ddec\x01\x00' > /tmp/kedei_lcd_in
-void d_delete_control()
+void d_delete_control(uint32_t event_id)
 {
 	printf("Delete control\n");
 	uint16_t id;
@@ -1064,7 +1078,7 @@ void d_delete_control()
 	
 }
 
-void d_delete_all_controls()
+void d_delete_all_controls(uint32_t event_id)
 {
 	printf("Delete all controls...\n");
 	if(time_control != NULL)
@@ -1083,48 +1097,48 @@ void d_delete_all_controls()
 }
 	
 // return: true - exit
-bool process_signature(uint8_t sig[])
+bool process_signature(uint32_t event_id, uint8_t sig[])
 {
 	printf("\n=========  process_signature  ==========\n");
 	if(compare_signature(sig, "exit"))
 	{
-		return true;
 		close(client_to_server);
+		return true;
 	}
 	// export PNG
 	if(compare_signature(sig, "expo"))
 	{
-		export_png();
+		export_png(event_id);
 		return false;
 	}
 	// Line 
 	if(compare_signature(sig, "line"))
 	{
-		draw_line();
+		draw_line(event_id);
 		return false;
 	}
 	// Label 
 	if(compare_signature(sig, "labl"))
 	{
-		draw_label();
+		draw_label(event_id);
 		return false;
 	}
 	if(compare_signature(sig, "dlbl"))
 	{
-		draw_d_label();
+		draw_d_label(event_id);
 		return false;
 	}
 	// text box
 	if(compare_signature(sig, "dtbx"))
 	{
-		draw_d_text_box();
+		draw_d_text_box(event_id);
 		return false;
 	}
 
 	// panel
 	if(compare_signature(sig, "dpan"))
 	{
-		draw_d_panel();
+		draw_d_panel(event_id);
 		return false;
 	}
 	
@@ -1132,42 +1146,42 @@ bool process_signature(uint8_t sig[])
 	// set text
 	if(compare_signature(sig, "dstx"))
 	{
-		d_set_text();
+		d_set_text(event_id);
 		return false;
 	}
 
 	// set label control for draw time
 	if(compare_signature(sig, "dstc"))
 	{
-		d_set_time_control();
+		d_set_time_control(event_id);
 		return false;
 	}	
 	
 	// show image
 	if(compare_signature(sig, "dimg"))
 	{
-		draw_d_image();
+		draw_d_image(event_id);
 		return false;
 	}
 
 	// delete control
 	if(compare_signature(sig, "ddec"))
 	{
-		d_delete_control();
+		d_delete_control(event_id);
 		return false;
 	}
 	
 	// delete all controls
 	if(compare_signature(sig, "ddac"))
 	{
-		d_delete_all_controls();
+		d_delete_all_controls(event_id);
 		return false;
 	}
 
 	
 	
 	//int read_buf_pos = 0;
-	if(compare_signature(sig, "BM"))
+/*	if(compare_signature(sig, "BM"))
 	{
 		printf("BMP file detected!\n");
 		receive_bmp_file(sig[2], sig[3]);
@@ -1176,7 +1190,7 @@ bool process_signature(uint8_t sig[])
 	else
 	{
 		printf("Unknown signature! %s\n", sig);
-	}
+	}*/
 	uint16_t allRead = 0;
 	/*while (1)
 	{
@@ -1243,8 +1257,10 @@ int fifo_loop()
 	   perror("open");
 	   return 1;
 	}
-	
+
+	// read 4 bytes - event id and 4 bytes - command name
 	uint8_t signature[SIGNATURE_SIZE];
+	uint32_t event_id;
 	printf("Server ON.\n");
 	while(1)
 	{
@@ -1257,22 +1273,34 @@ int fifo_loop()
 		}
 		do
 		{
-			unsigned short sig_readed = read(client_to_server, signature, SIGNATURE_SIZE);
-			if(sig_readed == 0)
+			int read_count = read(client_to_server, &event_id, 4);
+			if(read_count == 0)
 			{
 				// Fifo closed
 				break;
 			}
-			if(sig_readed < SIGNATURE_SIZE)
+			if(read_count < 4)
 			{
-				printf("Error! Signature need at leadt %d bytes!\n", SIGNATURE_SIZE);
+				printf("Error! Event id need at least %d bytes!\n", SIGNATURE_SIZE);
+				//close(client_to_server);
+				continue;
+			}
+			read_count = read(client_to_server, signature, SIGNATURE_SIZE);
+			if(read_count == 0)
+			{
+				// Fifo closed
+				break;
+			}
+			if(read_count < SIGNATURE_SIZE)
+			{
+				printf("Error! Signature need at least %d bytes!\n", SIGNATURE_SIZE);
 				//close(client_to_server);
 				continue;
 			}
 			bool prosess_res;
 			
 			pthread_mutex_lock(&lock_draw);
-			prosess_res = process_signature(signature);
+			prosess_res = process_signature(event_id, signature);
 			pthread_mutex_unlock(&lock_draw);
 			if(prosess_res)
 			{
@@ -1771,3 +1799,29 @@ int main(int argc,char *argv[])
 
 }
 
+void on_touch(uint16_t x, uint16_t y)
+{
+	dk_control *control = find_control_by_point(x, y);
+	struct __attribute__((__packed__))
+	{
+		uint16_t x;
+		uint16_t y;
+	}com_data;
+	uint16_t id;
+	if(control == NULL)
+	{
+		id = 0;
+		com_data.x = x;
+		com_data.y = y;
+	}
+	else
+	{
+		control_position_t abs_pos = get_abs_control_pos(control);
+		id = control->id;
+		com_data.x = x - abs_pos.left;
+		com_data.y = y - abs_pos.top;
+		
+	}
+	printf("on_touch id = %u\n", id);
+	my_write_event_with_add(0, id, "toch", &com_data, sizeof(com_data));
+}

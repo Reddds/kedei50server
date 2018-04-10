@@ -84,6 +84,7 @@ typedef struct
 
 void init_controls();
 dk_control *find_control(uint16_t id);
+dk_control *find_control_by_point(uint16_t x, uint16_t y);
 dk_control *get_control_at(uint16_t pos);
 int get_controls_count();
 dk_control *add_control(uint16_t id, uint16_t parent_id, control_types type,

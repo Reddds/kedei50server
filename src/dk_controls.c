@@ -84,6 +84,54 @@ dk_control *findArray(ControlArray *a, uint16_t id)
 	return NULL;
 }
 
+dk_control *findArrayByParent(ControlArray *a, uint16_t parent_id)
+{
+	for(int i = 0; i < a->used; i++)
+	{
+		if(a->array[i].parent_id == parent_id)
+			return &a->array[i];
+	}
+	return NULL;
+}
+
+bool isPointInControl(dk_control *control, uint16_t x, uint16_t y)
+{
+	control_position_t abs_pos = get_abs_control_pos(control);
+	return abs_pos.left <= x && abs_pos.left + abs_pos.width > x
+			&& abs_pos.top <= y && abs_pos.top + abs_pos.height > y;
+}
+
+
+
+dk_control *findArrayByPoint(ControlArray *a, dk_control *control,
+	uint16_t x, uint16_t y)
+{
+	// find first control
+	//dk_control *control = NULL;
+	if(control == NULL)
+	{
+		for(int i = 0; i < a->used; i++)
+		{
+			if(isPointInControl(&a->array[i], x, y))
+			{
+				control = &a->array[i];
+				break;
+			}
+		}
+		if(control == NULL)
+			return NULL;
+	}
+
+	for(int i = 0; i < a->used; i++)
+	{
+		if(a->array[i].parent_id == control->id && isPointInControl(&a->array[i], x, y))
+		{
+			return findArrayByPoint(a, &a->array[i], x, y);
+		}
+	}
+	return control;
+}
+
 int findPosInArray(ControlArray *a, uint16_t id)
 {
 	for(int i = 0; i < a->used; i++)
@@ -210,3 +258,7 @@ control_position_t get_abs_control_pos(dk_control *control)
 	return abs_pos;
 }
 
+dk_control *find_control_by_point(uint16_t x, uint16_t y)
+{
+	return findArrayByPoint(&root_controls, NULL, x, y);
+}

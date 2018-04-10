@@ -725,7 +725,7 @@ bool get_sensor_values()
 }
 
 volatile uint32_t last_tick = 0;
-#define TOUCH_INTERVAL_US 10000	
+#define TOUCH_INTERVAL_US 300000 // 250 ms	
 void alert(int gpio, int level, uint32_t tick)
 {
 	if(level == PI_TIMEOUT)
@@ -739,7 +739,10 @@ void alert(int gpio, int level, uint32_t tick)
 	
 	if(level == PI_LOW && (last_tick > tick || tick - last_tick > TOUCH_INTERVAL_US))
 	{
-		get_sensor_values();
+		if(get_sensor_values())
+		{
+			on_touch(touch_x, touch_y);
+		}
 		last_tick = tick;
 	}
 }
@@ -779,14 +782,14 @@ void create_sensor_thread()
     else
         printf("\n Sensor thread created successfully\n");*/
 }
-
+/*
 void* do_sensor_thread(void *arg)
 {
 	printf("sensor scan start/ Listening GPIO %u!", SENSOR_IRQ_PIN);
 	//gpioSetMode(SENSOR_PIN, PI_INPUT);
-	/* 5ms max gap after last pulse */
+	// 5ms max gap after last pulse 
 	//gpioSetWatchdog(SENSOR_PIN, 5);
-	/* monitor IR level changes */
+	// monitor IR level changes 
 	//gpioSetAlertFunc(SENSOR_PIN, alert);
 	return NULL;
 	while(true)
@@ -802,30 +805,12 @@ void* do_sensor_thread(void *arg)
 		if(false && level == PI_LOW)
 		{
 			if(get_sensor_values())
-				usleep(10000);
+			{
+				on_touch(touch_x, touch_y);
+				usleep(500000); // 500 ms
+			}
 		}
 	}
-
-
-	
-/*	bcm2835_gpio_fsel(RPI_GPIO_P1_22, BCM2835_GPIO_FSEL_INPT);
-	bcm2835_gpio_fen(RPI_GPIO_P1_22);
-	uint8_t eds;
-	printf("sensor scan start!");
-
-	while (1)
-    {
-		if (bcm2835_gpio_eds(RPI_GPIO_P1_22))
-        {
-            // Now clear the eds flag by setting it to 1
-            bcm2835_gpio_set_eds(RPI_GPIO_P1_22);
-            printf("event detected for pin\n");
-            //break;
-        }
-		// wait a bit
-        delay(100);
-    }
-	bcm2835_gpio_clr_fen(RPI_GPIO_P1_22);  */
 	
 	return NULL;
-}
+}*/
