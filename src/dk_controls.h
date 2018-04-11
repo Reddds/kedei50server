@@ -73,6 +73,7 @@ typedef struct
 	uint16_t top;
 	uint16_t width;
 	uint16_t height;
+	bool visible;
 	// if control need memory it must use this pointers for alloc
 	// for proper free
 	void *control_data;
@@ -90,6 +91,7 @@ int get_controls_count();
 dk_control *add_control(uint16_t id, uint16_t parent_id, control_types type,
 	uint16_t left, uint16_t top,
 	uint16_t width, uint16_t height,
+	bool visible,
 	void *control_data);
 bool delete_control(uint16_t id);
 bool delete_all_controls();

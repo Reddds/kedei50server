@@ -98,6 +98,9 @@ cairo_surface_t *surface;
 
 pthread_t tid[2];
 bool my_write_event(uint32_t event_id, uint16_t id, char *name);
+void redraw_all();
+void draw_controls_by_parent(uint16_t parent_id);
+void show_control_part(dk_control *control);
 
 pthread_mutex_t lock_draw;
 pthread_mutex_t lock_fifo_write;
@@ -240,15 +243,7 @@ void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 		printf("Error show part! Wrong size!\n");
 		return;
 	}
-	 
-	 
-	 
-	/*printf("First line: \n");
-	for(int i = 0; i < SCREEN_BUF_LINE_LEN; i++)
-	{
-		printf("%02X ", screen_buffer[i]);
-	}
-	printf("\n");*/
+
 	lcd_setframe(left, top, width, height);
 //	uint16_t rowbytes = (width * 3);
 
@@ -267,6 +262,11 @@ void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 			lcd_colorRGB(screen_buffer[cur_pos + 2], screen_buffer[cur_pos + 1], screen_buffer[cur_pos]);
 		}
 	}
+}
+
+void show_control_part(dk_control *control)
+{
+	show_part(control->left, control->top, control->width, control->height);
 }
 
 void receive_bmp_file(uint8_t byte2, uint8_t byte3)
@@ -680,6 +680,7 @@ void draw_d_label()
 dk_control *add_control_and_show(uint32_t event_id, uint16_t id, uint16_t parent_id, control_types type,
 	uint16_t left, uint16_t top,
 	uint16_t width, uint16_t height,
+	bool visible,
 	void *control_data)
 {
 	printf("Adding control\n");
@@ -688,24 +689,30 @@ dk_control *add_control_and_show(uint32_t event_id, uint16_t id, uint16_t parent
 	//	|| top + height > LCD_HEIGHT)
 	//	return NULL;
 
-	dk_control *control = add_control(id, parent_id, type, left, top, width, height, control_data);
+	// normalise
+	visible = visible > 0;
+	dk_control *control = add_control(id, parent_id, type, left, top, width, height,
+		visible, control_data);
 	if(control == NULL)
 	{
 		printf("Error!!!\n");
 		return NULL;
 	}
-	
-	control_position_t abs_pos = show_control(cr, control);
-	if(abs_pos.left == UNDEF_POS_VAL)
-	{
-		printf("Error abs pos!!!\n");
-		return NULL;
-
-	}
 
 	my_write_event(event_id, id, "crok");	
-	
-	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
+	if(visible)
+	{
+		control_position_t abs_pos = show_control(cr, control);
+		if(abs_pos.left == UNDEF_POS_VAL)
+		{
+			printf("Error abs pos!!!\n");
+			return NULL;
+
+		}
+
+		
+		show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
+	}
 	return control;
 }
 
@@ -722,6 +729,7 @@ void draw_d_label(uint32_t event_id)
 		uint16_t y;
 		uint16_t width;
 		uint16_t height;
+		uint8_t visible;
 		uint16_t font_size;
 		uint8_t r;
 		uint8_t g;
@@ -770,7 +778,8 @@ void draw_d_label(uint32_t event_id)
 	}
 	
 	add_control_and_show(event_id, d_label_data.id, d_label_data.parent_id, CT_LABEL,
-		d_label_data.x, d_label_data.y, d_label_data.width, d_label_data.height, text_box_data);
+		d_label_data.x, d_label_data.y, d_label_data.width, d_label_data.height,
+		d_label_data.visible, text_box_data);
 }
 
 //              id      parent_id x       y       width   height  fsize     r   g   b
@@ -786,6 +795,7 @@ void draw_d_text_box(uint32_t event_id)
 		uint16_t y;
 		uint16_t width;
 		uint16_t height;
+		uint8_t visible;
 		uint16_t font_size;
 		uint8_t r;
 		uint8_t g;
@@ -831,7 +841,9 @@ void draw_d_text_box(uint32_t event_id)
 		text_box_data->text = NULL;
 	}
 	
-	add_control_and_show(event_id, d_text_box_data.id, d_text_box_data.parent_id, CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, text_box_data);
+	add_control_and_show(event_id, d_text_box_data.id, d_text_box_data.parent_id,
+		CT_TEXT_BOX, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width,
+		d_text_box_data.height, d_text_box_data.visible, text_box_data);
 }
 
 void  draw_d_panel(uint32_t event_id)
@@ -844,7 +856,8 @@ void  draw_d_panel(uint32_t event_id)
 		uint16_t x;
 		uint16_t y;
 		uint16_t width;
-		uint16_t height;		
+		uint16_t height;
+		uint8_t visible;	
 		uint8_t r; 
 		uint8_t g;
 		uint8_t b;
@@ -862,7 +875,7 @@ void  draw_d_panel(uint32_t event_id)
 	
 	add_control_and_show(event_id, d_panel_data.id, d_panel_data.parent_id, CT_PANEL,
 		d_panel_data.x, d_panel_data.y, d_panel_data.width, d_panel_data.height,
-		panel_data);
+		d_panel_data.visible, panel_data);
 
 }
 
@@ -930,6 +943,44 @@ void d_set_text(uint32_t event_id)
 	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);*/
 }
 
+
+void d_set_visible(uint32_t event_id)
+{
+	printf("set visible\n");
+	struct __attribute__((__packed__))
+	{
+		uint16_t id;
+		uint8_t visible;
+	}d_set_visible_data;
+	int rcnt;
+	my_read_count(client_to_server, &d_set_visible_data, sizeof(d_set_visible_data), &rcnt);
+	if(rcnt < sizeof(d_set_visible_data))
+		return;
+
+	// Normalise
+	d_set_visible_data.visible = d_set_visible_data.visible > 0;
+	dk_control *control = find_control(d_set_visible_data.id);
+	if(control == NULL)
+	{
+		printf("control not found!");
+		return;
+	}
+	if(control->visible == d_set_visible_data.visible)
+		return;
+
+	control->visible = d_set_visible_data.visible;
+	if(control->visible)
+	{ // if now visible just draw control and it's children
+		show_control(cr, control);
+		draw_controls_by_parent(control->id);
+		show_control_part(control);
+	}
+	else
+	{
+		redraw_all();
+	}
+}
+
 void d_set_time_control(uint32_t event_id)
 {
 	printf("d_set_time_control\n");
@@ -969,6 +1020,8 @@ void d_set_time_control(uint32_t event_id)
 	
 }
 /*
+ * dimg
+ * 
  * image_type:
  * 	0 - png
  *
@@ -986,15 +1039,18 @@ void draw_d_image(uint32_t event_id)
 	printf("static image\n");
 	struct __attribute__((__packed__))
 	{
-		uint32_t event_id;
 		uint16_t id;
 		uint16_t parent_id;
 		uint16_t x;
 		uint16_t y;
 		uint16_t width;
 		uint16_t height;
+		uint8_t visible;
 		uint8_t image_type;
 		uint8_t scale_type;
+		uint8_t bg_r;
+		uint8_t bg_g;
+		uint8_t bg_b;
 		uint32_t image_len;
 	}d_image_data;
 
@@ -1005,6 +1061,14 @@ void draw_d_image(uint32_t event_id)
 		printf("Not need data! read: %d, need: %d\n", rcnt, sizeof(d_image_data));
 		return;
 	}
+
+	printf("id = %u, parent_id = %u, x = %u, y = %u, width = %u, height = %u, visible = %u, image_type = %u, scale_type = %u, text_len = %u\n",
+		d_image_data.id, d_image_data.parent_id, d_image_data.x, d_image_data.y,
+		d_image_data.width, d_image_data.height, d_image_data.visible,
+		d_image_data.image_type, d_image_data.scale_type,
+		d_image_data.image_len);	
+
+	
 	printf("Image size = %u\n", d_image_data.image_len);
 	uint8_t *image_src = NULL;
 	if(d_image_data.image_len > 0)
@@ -1022,26 +1086,46 @@ void draw_d_image(uint32_t event_id)
 	struct dk_image_data_tag *dk_image_data = (struct dk_image_data_tag*)malloc(sizeof(struct dk_image_data_tag));
 	dk_image_data->image_type = d_image_data.image_type;
 	dk_image_data->scale_type = d_image_data.scale_type;
+	dk_image_data->bg_color.r = d_image_data.bg_r;
+	dk_image_data->bg_color.g = d_image_data.bg_g;
+	dk_image_data->bg_color.b = d_image_data.bg_b;
+	
 	dk_image_data->image_len = d_image_data.image_len;
 	dk_image_data->image_data = image_src;
 
 	if(!add_control_and_show(event_id, d_image_data.id, d_image_data.parent_id, CT_STATIC_IMAGE, d_image_data.x, d_image_data.y,
-		d_image_data.width, d_image_data.height, dk_image_data))
+		d_image_data.width, d_image_data.height, d_image_data.visible, dk_image_data))
 	{
-		free(image_src);
+		if(image_src != NULL)
+			free(image_src);
 	}		
 	
 	//show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
 
-void redraw_all()
+void draw_controls_by_parent(uint16_t parent_id)
 {
-	cairo_clear_all(cr);
 	int controls_count = get_controls_count();
 	for(uint8_t control_pos = 0; control_pos < controls_count; control_pos++)
 	{
-		show_control(cr, get_control_at(control_pos));
+		dk_control *control = get_control_at(control_pos);
+		if(control->parent_id != parent_id || !control->visible)
+			continue;
+		show_control(cr, control);
+		draw_controls_by_parent(control->id);
 	}
+}
+
+void redraw_all()
+{
+	printf("redraw_all\n");
+	cairo_clear_all(cr);
+	draw_controls_by_parent(0);
+	/*int controls_count = get_controls_count();
+	for(uint8_t control_pos = 0; control_pos < controls_count; control_pos++)
+	{
+		show_control(cr, get_control_at(control_pos));
+	}*/
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 }
 
@@ -1142,11 +1226,25 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 		return false;
 	}
 	
+	// show image
+	if(compare_signature(sig, "dimg"))
+	{
+		draw_d_image(event_id);
+		return false;
+	}
+
 	// commands
 	// set text
 	if(compare_signature(sig, "dstx"))
 	{
 		d_set_text(event_id);
+		return false;
+	}
+
+	// set visible
+	if(compare_signature(sig, "dsvi"))
+	{
+		d_set_visible(event_id);
 		return false;
 	}
 
@@ -1157,13 +1255,6 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 		return false;
 	}	
 	
-	// show image
-	if(compare_signature(sig, "dimg"))
-	{
-		draw_d_image(event_id);
-		return false;
-	}
-
 	// delete control
 	if(compare_signature(sig, "ddec"))
 	{

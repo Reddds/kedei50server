@@ -35,14 +35,19 @@ hex_color_t *get_std_color(std_colors_t cid)
 }
 
 static void
-set_hex_color (cairo_t *cr, std_colors_t color)
+set_color (cairo_t *cr, hex_color_t *col)
 {
-	hex_color_t *col = get_std_color(color);
-	//printf("Set color r = %u g = %u b = %u \n", col->r, col->g, col->b);
     cairo_set_source_rgb (cr,
 			 col->r / 255.0,
 			 col->g / 255.0,
 			 col->b / 255.0);
+}
+
+static void
+set_hex_color (cairo_t *cr, std_colors_t color)
+{
+	hex_color_t *col = get_std_color(color);
+	set_color(cr, col);
 }
 
 static void
@@ -322,7 +327,7 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 			bg_color->g / 255.0, 
 			bg_color->b / 255.0);
 
-	cairo_stroke_preserve(cr);
+	//cairo_stroke_preserve(cr);
 	cairo_fill(cr);
 	
 	cairo_set_source_rgb (cr, 
@@ -476,10 +481,6 @@ control_position_t draw_dk_image(cairo_t *cr, dk_control *control)
 
 	struct dk_image_data_tag *dk_image_data = control->control_data;
 	
-	png_stream_to_byte_array_closure_t closure;
-	closure.data = dk_image_data->image_data;
-    closure.pos = 0;
-    closure.max_size = dk_image_data->image_len;
 
     //printf("Closure: pos = %u, max_size = %u\n",
 	//	closure.pos, closure.max_size);
@@ -490,6 +491,21 @@ control_position_t draw_dk_image(cairo_t *cr, dk_control *control)
 	cairo_translate(cr, abs_pos.left, abs_pos.top);
 	cairo_rectangle (cr, 0, 0, abs_pos.width, abs_pos.height);
 	cairo_clip (cr);
+	cairo_rectangle (cr, 0, 0, abs_pos.width, abs_pos.height);
+	set_color(cr, &dk_image_data->bg_color);
+	//cairo_stroke_preserve(cr);
+	cairo_fill(cr);
+
+	if(dk_image_data->image_len == 0 || dk_image_data->image_data == NULL)
+	{
+		cairo_restore (cr);
+		return abs_pos;
+	}
+	png_stream_to_byte_array_closure_t closure;
+	closure.data = dk_image_data->image_data;
+    closure.pos = 0;
+    closure.max_size = dk_image_data->image_len;
+
 	cairo_new_path (cr); /* path not consumed by clip()*/
 
 	cairo_surface_t *image = cairo_image_surface_create_from_png_stream(&read_png_stream_from_byte_array, &closure);

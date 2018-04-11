@@ -44,6 +44,7 @@ struct dk_image_data_tag
 {
 	uint8_t image_type;
 	uint8_t scale_type;
+	hex_color_t bg_color;
 	uint32_t image_len;
 	uint8_t *image_data;
 };

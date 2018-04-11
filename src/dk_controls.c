@@ -112,7 +112,7 @@ dk_control *findArrayByPoint(ControlArray *a, dk_control *control,
 	{
 		for(int i = 0; i < a->used; i++)
 		{
-			if(isPointInControl(&a->array[i], x, y))
+			if(a->array[i].visible && isPointInControl(&a->array[i], x, y))
 			{
 				control = &a->array[i];
 				break;
@@ -124,7 +124,8 @@ dk_control *findArrayByPoint(ControlArray *a, dk_control *control,
 
 	for(int i = 0; i < a->used; i++)
 	{
-		if(a->array[i].parent_id == control->id && isPointInControl(&a->array[i], x, y))
+		if(a->array[i].visible && a->array[i].parent_id == control->id
+			&& isPointInControl(&a->array[i], x, y))
 		{
 			return findArrayByPoint(a, &a->array[i], x, y);
 		}
@@ -167,6 +168,7 @@ void init_controls()
 dk_control *add_control(uint16_t id, uint16_t parent_id, control_types type,
 	uint16_t left, uint16_t top,
 	uint16_t width, uint16_t height,
+	bool visible,
 	void *control_data)
 {
 	printf("Adding control 111\n");
@@ -210,6 +212,7 @@ dk_control *add_control(uint16_t id, uint16_t parent_id, control_types type,
 	control.top = top;
 	control.width = width;
 	control.height = height;
+	control.visible = visible;
 	control.control_data = control_data;
 	control.control_data1 = NULL;
 	control.control_data2 = NULL;
