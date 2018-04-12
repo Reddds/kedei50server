@@ -236,13 +236,25 @@ bool skip_read(int skip)
 
 void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 {
-	//printf("Swow part left = %u, top = %u, width = %u, height = %u\n\n",
-	//	left, top, width, height);
-	if(left + width > LCD_WIDTH || top + height > LCD_HEIGHT)
+	printf("Swow part left = %u, top = %u, width = %u, height = %u\n\n",
+		left, top, width, height);
+	if(left >= LCD_WIDTH || top >= LCD_HEIGHT)
 	{
-		printf("Error show part! Wrong size!\n");
+		printf("Error show part! Outside screen!\n");
 		return;
 	}
+	
+	if(left + width > LCD_WIDTH)
+	{
+		printf("Warn show part! Wrong size!\n");
+		width = LCD_WIDTH - left;
+	}
+	if(top + height > LCD_HEIGHT)
+	{
+		printf("Warn show part! Wrong size!\n");
+		height = LCD_HEIGHT - top;
+	}
+
 
 	lcd_setframe(left, top, width, height);
 //	uint16_t rowbytes = (width * 3);
@@ -720,7 +732,7 @@ dk_control *add_control_and_show(uint32_t event_id, uint16_t id, uint16_t parent
 // echo -e 'dlbl\x02\x00\x20\x00\x60\x00\x80\x00\x60\x00\x24\x00\x11\x12\x80\x05\x00Logos' > /tmp/kedei_lcd_in
 void draw_d_label(uint32_t event_id)
 {
-	printf("draw_d_text_box\n");
+	printf("draw_d_label\n");
 	struct __attribute__((__packed__)) //d_text_box_data_tag
 	{
 		uint16_t id;
@@ -734,6 +746,7 @@ void draw_d_label(uint32_t event_id)
 		uint8_t r;
 		uint8_t g;
 		uint8_t b;
+		uint8_t text_aling;
 		uint16_t text_len;
 	}d_label_data;
 	
@@ -765,6 +778,7 @@ void draw_d_label(uint32_t event_id)
 	text_box_data->color.r = d_label_data.r;
 	text_box_data->color.g = d_label_data.g;
 	text_box_data->color.b = d_label_data.b;
+	text_box_data->text_aling = d_label_data.text_aling;
 	
 	uint16_t slen = strlen(input_buf);
 	if(slen > 0)
@@ -829,6 +843,7 @@ void draw_d_text_box(uint32_t event_id)
 	text_box_data->color.r = d_text_box_data.r;
 	text_box_data->color.g = d_text_box_data.g;
 	text_box_data->color.b = d_text_box_data.b;
+	
 	
 	uint16_t slen = strlen(input_buf);
 	if(slen > 0)
@@ -943,6 +958,76 @@ void d_set_text(uint32_t event_id)
 	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);*/
 }
 
+//dsim
+void d_set_image(uint32_t event_id)
+{
+	printf("d_set_image\n");
+	struct __attribute__((__packed__))
+	{
+		uint16_t id;
+		uint8_t image_type;
+		uint8_t scale_type;
+		uint8_t bg_r;
+		uint8_t bg_g;
+		uint8_t bg_b;
+		uint32_t image_len;
+	}d_image_data;
+	int rcnt;
+	my_read_count(client_to_server, &d_image_data, sizeof(d_image_data), &rcnt);
+	if(rcnt < sizeof(d_image_data))
+	{
+		printf("Not need data! read: %d, need: %d\n", rcnt, sizeof(d_image_data));
+		return;
+	}
+
+	printf("id = %u, image_type = %u, scale_type = %u, image_len = %u\n",
+		d_image_data.id, 
+		d_image_data.image_type, d_image_data.scale_type,
+		d_image_data.image_len);	
+
+	
+	printf("Image size = %u\n", d_image_data.image_len);
+	uint8_t *image_src = NULL;
+	if(d_image_data.image_len > 0)
+	{
+		image_src = malloc(d_image_data.image_len);
+		if(image_src == NULL)
+			return;
+			
+		bool all_read = my_read_count(client_to_server, image_src, d_image_data.image_len, &rcnt);
+		if(rcnt == 0 || !all_read)
+			return;
+		printf("Read image success!\n");
+	}
+
+	dk_control *img = find_control(d_image_data.id);
+	if(img == NULL)
+	{
+		if(image_src != NULL)
+			free(image_src);
+	}
+
+	struct dk_image_data_tag *dk_image_data = img->control_data;
+	if(dk_image_data->image_data)
+	{
+		free(dk_image_data->image_data);
+	}
+
+	dk_image_data->image_type = d_image_data.image_type;
+	dk_image_data->scale_type = d_image_data.scale_type;
+	dk_image_data->bg_color.r = d_image_data.bg_r;
+	dk_image_data->bg_color.g = d_image_data.bg_g;
+	dk_image_data->bg_color.b = d_image_data.bg_b;
+	
+	dk_image_data->image_len = d_image_data.image_len;
+	dk_image_data->image_data = image_src;
+
+	if(img->visible)
+	{
+		show_control(cr, img);
+		show_control_part(img);
+	}
+}
 
 void d_set_visible(uint32_t event_id)
 {
@@ -1062,7 +1147,7 @@ void draw_d_image(uint32_t event_id)
 		return;
 	}
 
-	printf("id = %u, parent_id = %u, x = %u, y = %u, width = %u, height = %u, visible = %u, image_type = %u, scale_type = %u, text_len = %u\n",
+	printf("id = %u, parent_id = %u, x = %u, y = %u, width = %u, height = %u, visible = %u, image_type = %u, scale_type = %u, image_len = %u\n",
 		d_image_data.id, d_image_data.parent_id, d_image_data.x, d_image_data.y,
 		d_image_data.width, d_image_data.height, d_image_data.visible,
 		d_image_data.image_type, d_image_data.scale_type,
@@ -1255,6 +1340,13 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 		return false;
 	}	
 	
+	// set image
+	if(compare_signature(sig, "dsim"))
+	{
+		d_set_image(event_id);
+		return false;
+	}
+
 	// delete control
 	if(compare_signature(sig, "ddec"))
 	{
@@ -1282,33 +1374,21 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	{
 		printf("Unknown signature! %s\n", sig);
 	}*/
-	uint16_t allRead = 0;
-	/*while (1)
+
+	// read all available
+/*	uint16_t allRead = 0;
+	while (1)
 	{
 	   
-		unsigned short readed = read(client_to_server, &buf[read_buf_pos], MYBUF);
-		read_buf_pos = 0;
+		unsigned short readed = read(client_to_server, input_buf, MYBUF);
 		allRead += readed;
 		if(readed == 0)
 		{
-			printf("Read 0 bytes!. Close!\n");
 			break;
 		}
-
-		printf("Received: readed = %u last byte = 0x%2X\n", readed, buf[readed - 1]);
-		
-	  
-		/ *if (strcmp("",buf)!=0)
-		{
-			printf("Received: %s (len = %d)\n", buf, strlen(buf));
-			//printf("Sending back...\n");
-			//write(server_to_client,buf,BUFSIZ);
-		}* /
-
-		// clean buf from any data 
-		memset(buf, 0, sizeof(buf));
 	}*/
-	printf("All Read %u bytes!\n", allRead);
+	
+	printf("Unknown signature!\n");//, allRead Read %u bytes!
 	return false;
 }
 
@@ -1574,7 +1654,7 @@ bool calibrate_touch()
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 	
 	printf("Calibrating touch...\n");
-	draw_text_in_rect(cr, 30, 130, 150, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "Calibrating...");
+	draw_text_in_rect(cr, 30, 130, 150, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), TA_CENTER_MIDDLE, "Calibrating...");
 	show_part(130, 150, 240, 36);
 	
 	// laft top point 30 30
@@ -1679,10 +1759,10 @@ bool calibrate_touch()
 	touch_calibrated = true;
 	save_settings();
 	// testing
-	draw_text_in_rect(cr, 30, 130, 120, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "Touch test...");
-	draw_text_in_rect(cr, 30, 130, 160, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "For exit press OK");
+	draw_text_in_rect(cr, 30, 130, 120, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), TA_CENTER_MIDDLE, "Touch test...");
+	draw_text_in_rect(cr, 30, 130, 160, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), TA_CENTER_MIDDLE, "For exit press OK");
 
-	draw_text_in_rect(cr, 30, 200, 200, 60, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), "OK");
+	draw_text_in_rect(cr, 30, 200, 200, 60, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), TA_CENTER_MIDDLE, "OK");
 
 	cairo_set_source_rgb (cr, 0, 1, 0);
 	cairo_set_line_width(cr, 2);

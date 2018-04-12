@@ -25,11 +25,24 @@ struct panel_data_tag
 	hex_color_t bg_color;
 };
 
+typedef enum
+{
+	TA_LEFT_TOP,
+	TA_CENTER_TOP,
+	TA_RIGHT_TOP,
+	TA_LEFT_MIDDLE, // default
+	TA_CENTER_MIDDLE,
+	TA_RIGHT_MIDDLE,
+	TA_LEFT_BOTTOM,
+	TA_CENTER_BOTTOM,
+	TA_RIGHT_BOTTOM
+}text_alingment_t;
 
 struct label_data_tag
 {
 	uint16_t font_size;
 	hex_color_t color;
+	text_alingment_t text_aling;
 	char *text;
 };
 
@@ -59,5 +72,6 @@ control_position_t set_text(cairo_t *cr, dk_control *control, char *text);
 void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
 						hex_color_t *color,
 						hex_color_t *bg_color,
+						text_alingment_t text_aling,
 						char *text);
 #endif

@@ -309,6 +309,7 @@ void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text,
 void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
 						hex_color_t *color,
 						hex_color_t *bg_color,
+						text_alingment_t text_aling,
 						char *text)
 {
 	if(text == NULL)
@@ -322,6 +323,10 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 	cairo_clip (cr);
 
 	cairo_rectangle (cr, left, top, width, height);
+
+	printf("Clip text x = %u, y = %u, width = %u, height = %u\n",
+		left, top, width, height);
+	
 	cairo_set_source_rgb (cr, 
 			bg_color->r / 255.0, 
 			bg_color->g / 255.0, 
@@ -336,19 +341,56 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 			color->b / 255.0);
 	cairo_select_font_face (cr, "sans", 0, 0);
 	cairo_set_font_size (cr, font_size);
+	// "yg" - for bottom extensions
 	cairo_text_extents (cr, "Wygitf", &extents);
 
 	//printf("y_bearing = %f, height = %f\n", extents.y_bearing, extents.height);
 
 	double bot_ext = extents.height + extents.y_bearing;
 	double full_height = extents.height + bot_ext;
-	uint16_t top_pos = top + height - bot_ext;
-	if(full_height < height)
+	cairo_text_extents (cr, text, &extents);
+	uint16_t start_point_x = left;
+	uint16_t start_point_y = top + height - bot_ext;
+	switch(text_aling)
 	{
-		top_pos -= height / 2.0 - (full_height / 2);// + extents.y_bearing
+		case TA_LEFT_TOP:
+			start_point_y = top + extents.height;
+			break;
+		case TA_CENTER_TOP:
+			start_point_x = left + width / 2 - extents.width / 2;
+			start_point_y = top + extents.height;
+			break;
+		case TA_RIGHT_TOP:
+			start_point_x = left + width - extents.width;
+			start_point_y = top + extents.height;
+			break;
+		case TA_LEFT_MIDDLE:
+			start_point_y -= height / 2.0 - (full_height / 2);
+			break;
+		case TA_CENTER_MIDDLE:
+			start_point_x = left + width / 2 - extents.width / 2;
+			start_point_y -= height / 2.0 - (full_height / 2);
+			break;
+		case TA_RIGHT_MIDDLE:
+			start_point_x = left + width - extents.width;
+			start_point_y -= height / 2.0 - (full_height / 2);
+			break;
+		case TA_LEFT_BOTTOM:
+			break;
+		case TA_CENTER_BOTTOM:
+			start_point_x = left + width / 2 - extents.width / 2;
+			break;
+		case TA_RIGHT_BOTTOM:
+			start_point_x = left + width - extents.width;
+			break;
+
 	}
+//	if(full_height < height)
+//	{
+//		start_point_y -= height / 2.0 - (full_height / 2);// + extents.y_bearing
+//	}
 	
-	cairo_move_to (cr, left, top_pos);
+	cairo_move_to (cr, start_point_x, start_point_y);
 	cairo_show_text (cr, text);
 	cairo_set_line_width (cr, 1.0);
 	cairo_stroke (cr);
@@ -396,7 +438,8 @@ control_position_t draw_dk_label(cairo_t *cr, dk_control *control)
 		dk_control *parent_control = find_control(control->parent_id);
 		if(parent_control != NULL)
 		{
-			cairo_rectangle (cr, parent_control->left, parent_control->top, parent_control->width, parent_control->height);
+			control_position_t parent_abs_pos = get_abs_control_pos(parent_control);
+			cairo_rectangle (cr, parent_abs_pos.left, parent_abs_pos.top, parent_abs_pos.width, parent_abs_pos.height);
 			cairo_clip (cr);
 			
 			if(parent_control->type == CT_PANEL)
@@ -412,12 +455,15 @@ control_position_t draw_dk_label(cairo_t *cr, dk_control *control)
 		}
 	}
 
-	draw_text_in_rect(cr, ((struct label_data_tag *)control->control_data)->font_size,
+	struct label_data_tag *label_data = (struct label_data_tag *)control->control_data;
+
+	draw_text_in_rect(cr, label_data->font_size,
 				abs_pos.left, abs_pos.top,
                  abs_pos.width, abs_pos.height,
-                 &((struct label_data_tag *)control->control_data)->color,
+                 &label_data->color,
                  bg_color,
-                 ((struct label_data_tag *)control->control_data)->text);
+                 label_data->text_aling,
+                 label_data->text);
 		
     cairo_restore (cr);
     return abs_pos;
@@ -435,13 +481,16 @@ control_position_t draw_dk_text_box(cairo_t *cr, dk_control *control)
 	printf("Abs Pos: left = %u, top = %u, width = %u, height = %u\n",
 		abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
 	bevel_box (cr, abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
+
+	struct text_box_data_tag *text_box_data = (struct text_box_data_tag *)control->control_data;
 	
-	draw_text_in_rect(cr, ((struct text_box_data_tag *)control->control_data)->font_size,
+	draw_text_in_rect(cr, text_box_data->font_size,
 				abs_pos.left + 3, abs_pos.top + 3,
                  abs_pos.width - 6, abs_pos.height - 6,
-                 &((struct text_box_data_tag *)control->control_data)->color,
+                 &text_box_data->color,
                  get_std_color(COL_HI_COLOR_1),
-                 ((struct text_box_data_tag *)control->control_data)->text);
+                 TA_LEFT_MIDDLE,
+                 text_box_data->text);
 		
     cairo_restore (cr);
     return abs_pos;
