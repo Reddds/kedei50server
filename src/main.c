@@ -278,7 +278,8 @@ void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 
 void show_control_part(dk_control *control)
 {
-	show_part(control->left, control->top, control->width, control->height);
+	control_position_t abs_pos = get_abs_control_pos(control);
+	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
 }
 
 void receive_bmp_file(uint8_t byte2, uint8_t byte3)
