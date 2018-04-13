@@ -175,7 +175,8 @@ bool my_write(void *buf, int count, bool isLock)
 	return true;
 }
 
-bool my_write_event_with_add(uint32_t event_id, uint16_t id, char *name, void *additional, uint16_t count)
+bool my_write_event_with_add(uint32_t event_id, uint16_t id, char *name,
+	void *additional, uint16_t count, bool isLock)
 {
 	if(strlen(name) != 4)
 	{
@@ -187,27 +188,31 @@ bool my_write_event_with_add(uint32_t event_id, uint16_t id, char *name, void *a
 	memcpy(&outbuf[4], &id, 2);
 	memcpy(&outbuf[6], name, 4);
 	memcpy(&outbuf[10], &count, 2);
-	pthread_mutex_lock(&lock_fifo_write);
+	if(isLock)
+		pthread_mutex_lock(&lock_fifo_write);
 	if(!my_write(outbuf, sizeof(outbuf), false))
 	{
 		printf("Error writing event headr!\n");
-		pthread_mutex_unlock(&lock_fifo_write);
+		if(isLock)
+			pthread_mutex_unlock(&lock_fifo_write);
 		return false;
 	}
-	if(count > 0)
+	if(count > 0 || additional != NULL)
 		if(!my_write(additional, count, false))
 		{
 			printf("Error writing event additional data!\n");
-			pthread_mutex_unlock(&lock_fifo_write);
+			if(isLock)
+				pthread_mutex_unlock(&lock_fifo_write);
 			return false;
 		}
-	pthread_mutex_unlock(&lock_fifo_write);
+	if(isLock)
+		pthread_mutex_unlock(&lock_fifo_write);
 	return true;	
 }
 
 bool my_write_event(uint32_t event_id, uint16_t id, char *name)
 {
-	return my_write_event_with_add(event_id, id, name, NULL, 0);
+	return my_write_event_with_add(event_id, id, name, NULL, 0, true);
 }
 
 
@@ -437,6 +442,56 @@ void export_png(uint32_t event_id)
 
 }
 
+#define EXPORT_PNG_BUF_LEN 30000
+typedef struct
+{
+	uint length;
+	uint8_t *buf;
+}export_data_t;
+
+cairo_status_t cairo_write_func (void *closure,
+                       const unsigned char *data,
+                       unsigned int length)
+{
+	printf("cairo_write_func %u bytes\n", length);
+	export_data_t *exp_data = (export_data_t *)closure;
+	if(exp_data->length + length > EXPORT_PNG_BUF_LEN)
+		return CAIRO_STATUS_WRITE_ERROR;
+	memcpy(&exp_data->buf[exp_data->length], data, length);
+	exp_data->length += length;
+	return CAIRO_STATUS_SUCCESS;
+}
+
+void d_export_png(uint32_t event_id)
+{
+	printf("Export screen to PNG in FIFO...\n");
+
+	export_data_t exp_data = {.length = 0};
+	exp_data.buf = malloc(EXPORT_PNG_BUF_LEN);
+	if(exp_data.buf == NULL)
+	{
+		printf("Export fail 0!\n");
+		return;
+	}
+	cairo_status_t export_res =
+		cairo_surface_write_to_png_stream (surface,
+                                   &cairo_write_func,
+                                   &exp_data);
+
+    if(export_res != CAIRO_STATUS_SUCCESS)
+    {
+		printf("Export fail!\n");
+		if(exp_data.buf != NULL)
+			free(exp_data.buf);
+		return;
+	}
+	my_write_event_with_add(event_id, 0, "scsh", exp_data.buf, exp_data.length,
+		true);
+	free(exp_data.buf);
+	printf("Export success, wrote %u bytes of image\n", exp_data.length);
+
+
+}
 
 char *strmbtok ( char *input, char *delimit, const char *openblock, const char *closeblock) {
     static char *token = NULL;
@@ -1275,12 +1330,6 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 		close(client_to_server);
 		return true;
 	}
-	// export PNG
-	if(compare_signature(sig, "expo"))
-	{
-		export_png(event_id);
-		return false;
-	}
 	// Line 
 	if(compare_signature(sig, "line"))
 	{
@@ -1320,6 +1369,20 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	}
 
 	// commands
+	// export PNG
+	if(compare_signature(sig, "expo"))
+	{
+		export_png(event_id);
+		return false;
+	}
+
+	// get screenshot
+	if(compare_signature(sig, "dexp"))
+	{
+		d_export_png(event_id);
+		return false;
+	}
+
 	// set text
 	if(compare_signature(sig, "dstx"))
 	{
@@ -1995,5 +2058,5 @@ void on_touch(uint16_t x, uint16_t y)
 		
 	}
 	printf("on_touch id = %u\n", id);
-	my_write_event_with_add(0, id, "toch", &com_data, sizeof(com_data));
+	my_write_event_with_add(0, id, "toch", &com_data, sizeof(com_data), true);
 }
