@@ -468,7 +468,7 @@ void* do_sensor_thread(void *arg)
 {
 	bcm2835_gpio_fsel(RPI_GPIO_P1_22, BCM2835_GPIO_FSEL_INPT);
 	bcm2835_gpio_fen(RPI_GPIO_P1_22);
-	uint8_t eds;
+//	uint8_t eds;
 	printf("sensor scan start!");
 	
 	while (1)

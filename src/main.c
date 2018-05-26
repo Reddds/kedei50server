@@ -1,3 +1,5 @@
+// !!! For compile use MAKE!
+
 /*
  * main.c
  * 
@@ -30,6 +32,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+
 #include <ctype.h>
 #include <time.h>
 #include <png.h>
@@ -85,8 +88,12 @@ extern volatile int touch_raw_x;
 extern volatile int touch_raw_y;
 extern volatile uint16_t touch_x, touch_y;
 
-extern dk_control *time_control;
-extern dk_control *date_control;
+extern uint16_t time_control_id;
+extern uint16_t date_control_id;
+
+extern volatile uint8_t sys_controls_cnt;
+extern volatile uint16_t sys_controls_id[MAX_SYS_CONTROLS];
+extern volatile uint8_t sys_controls_type[MAX_SYS_CONTROLS];
 //#define MAX_CONTROL 256
 
 //dk_control *dk_controls[MAX_CONTROL];
@@ -113,6 +120,7 @@ bool compare_signature(uint8_t sig[], char* val)
 	int len = strlen(val);
 	if(len > SIGNATURE_SIZE)
 	{
+		printf_log_time();
 		printf("Error! compare signature with wrong len! Need: %d, found: %s (%d)\n", SIGNATURE_SIZE, val, len);
 		return false;
 	}
@@ -126,7 +134,7 @@ bool compare_signature(uint8_t sig[], char* val)
 
 // read with timeout
 // read_count - real read
-bool my_read_count(int fdesc, void *buf, int count, int *read_count)
+bool my_read_count(int fdesc, void *read_buf, int count, int *read_count)
 {
 	*read_count = 0;
 	struct timespec gettime_now;
@@ -136,7 +144,7 @@ bool my_read_count(int fdesc, void *buf, int count, int *read_count)
 	start_time = gettime_now.tv_nsec;
 	while(*read_count < count)
 	{
-		int cur_read = read(fdesc, buf, count - *read_count);
+		int cur_read = read(fdesc, &((uint8_t *)read_buf)[*read_count], count - *read_count);
 		if(cur_read < 0)
 		{
 			perror("read");
@@ -180,6 +188,7 @@ bool my_write_event_with_add(uint32_t event_id, uint16_t id, char *name,
 {
 	if(strlen(name) != 4)
 	{
+		printf_log_time();
 		printf("Event name len not 4!\n");
 		return false;
 	}
@@ -192,6 +201,7 @@ bool my_write_event_with_add(uint32_t event_id, uint16_t id, char *name,
 		pthread_mutex_lock(&lock_fifo_write);
 	if(!my_write(outbuf, sizeof(outbuf), false))
 	{
+		printf_log_time();
 		printf("Error writing event headr!\n");
 		if(isLock)
 			pthread_mutex_unlock(&lock_fifo_write);
@@ -200,6 +210,7 @@ bool my_write_event_with_add(uint32_t event_id, uint16_t id, char *name,
 	if(count > 0 || additional != NULL)
 		if(!my_write(additional, count, false))
 		{
+			printf_log_time();
 			printf("Error writing event additional data!\n");
 			if(isLock)
 				pthread_mutex_unlock(&lock_fifo_write);
@@ -231,6 +242,7 @@ bool skip_read(int skip)
 		bool is_readed = my_read(client_to_server, buf, cur_skip);
 		if(!is_readed)
 		{
+			printf_log_time();
 			printf("Error in skipping!\n");
 			return false;
 		}
@@ -241,21 +253,25 @@ bool skip_read(int skip)
 
 void show_part(uint16_t left, uint16_t top, uint16_t width, uint16_t height)
 {
+	printf_log_time();
 	printf("Swow part left = %u, top = %u, width = %u, height = %u\n\n",
 		left, top, width, height);
 	if(left >= LCD_WIDTH || top >= LCD_HEIGHT)
 	{
+		printf_log_time();
 		printf("Error show part! Outside screen!\n");
 		return;
 	}
 	
 	if(left + width > LCD_WIDTH)
 	{
+		printf_log_time();
 		printf("Warn show part! Wrong size!\n");
 		width = LCD_WIDTH - left;
 	}
 	if(top + height > LCD_HEIGHT)
 	{
+		printf_log_time();
 		printf("Warn show part! Wrong size!\n");
 		height = LCD_HEIGHT - top;
 	}
@@ -307,6 +323,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	bool is_readed = my_read(client_to_server, &buf[4], rrr);
 	if(!is_readed)
 	{
+		printf_log_time();
 		printf("Error reading bmp!\n");
 		return;
 	}
@@ -317,12 +334,14 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 	iheight = 	READ_32(buf, 0x16);
 	ibpp =		READ_16(buf, 0x1C);
 	printf("\n\n");
+	printf_log_time();
 	printf("File Size: %u\nOffset: %u\nWidth: %u\nHeight: %u\nBPP: %u\n\n",isize,ioffset,iwidth,iheight,ibpp);
 	
 	uint16_t skip_bytes = ioffset - sizeof(buf);
 	//printf("Skip %u bites before start offset\n", skip_bytes);
 	if(!skip_read(skip_bytes))		
 	{
+		printf_log_time();
 		printf("Error reading BMP skip!\n");
 		return;
 	}
@@ -352,6 +371,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 		{
 			if(!skip_read(rowbytes))		
 			{
+				printf_log_time();
 				printf("Error reading BMP!\n");
 				return;
 			}
@@ -377,6 +397,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 		//read_line_len = LCD_WIDTH * 3;
 		
 	}
+	printf_log_time();
 	printf("tile = %d, startPos = %d, start_bottom_row = %d", tail, start_bottom_row * STRIDE, start_bottom_row);
 	//printf("read_line_len = %d, rowbytes = %lu\n", read_line_len, rowbytes);
 	//printf("reading line: ");
@@ -424,6 +445,7 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 		{
 			if(!skip_read(tail))		
 			{
+				printf_log_time();
 				printf("\nError reading BMP!\n");
 				return;
 			}
@@ -436,8 +458,10 @@ void receive_bmp_file(uint8_t byte2, uint8_t byte3)
 
 void export_png(uint32_t event_id)
 {
+	printf_log_time();
 	printf("Export screen to PNG '/tmp/export.png'...\n");
 	cairo_surface_write_to_png (surface, "/tmp/export.png");
+	printf_log_time();
 	printf("Export success\n");
 
 }
@@ -453,7 +477,8 @@ cairo_status_t cairo_write_func (void *closure,
                        const unsigned char *data,
                        unsigned int length)
 {
-	printf("cairo_write_func %u bytes\n", length);
+	//printf_log_time();
+	//printf("cairo_write_func %u bytes\n", length);
 	export_data_t *exp_data = (export_data_t *)closure;
 	if(exp_data->length + length > EXPORT_PNG_BUF_LEN)
 		return CAIRO_STATUS_WRITE_ERROR;
@@ -464,12 +489,14 @@ cairo_status_t cairo_write_func (void *closure,
 
 void d_export_png(uint32_t event_id)
 {
+	printf_log_time();
 	printf("Export screen to PNG in FIFO...\n");
 
 	export_data_t exp_data = {.length = 0};
 	exp_data.buf = malloc(EXPORT_PNG_BUF_LEN);
 	if(exp_data.buf == NULL)
 	{
+		printf_log_time();
 		printf("Export fail 0!\n");
 		return;
 	}
@@ -480,6 +507,7 @@ void d_export_png(uint32_t event_id)
 
     if(export_res != CAIRO_STATUS_SUCCESS)
     {
+		printf_log_time();
 		printf("Export fail!\n");
 		if(exp_data.buf != NULL)
 			free(exp_data.buf);
@@ -488,6 +516,7 @@ void d_export_png(uint32_t event_id)
 	my_write_event_with_add(event_id, 0, "scsh", exp_data.buf, exp_data.length,
 		true);
 	free(exp_data.buf);
+	printf_log_time();
 	printf("Export success, wrote %u bytes of image\n", exp_data.length);
 
 
@@ -660,6 +689,7 @@ void draw_line(uint32_t event_id)
 		}
 		pch = strmbtok (NULL, " ", acOpen, acClose);
 	}
+	printf_log_time();
 	printf("line w = %u, x1 = %u, y1 = %u, x2 = %u, y2 = %u, r = %u, g = %u, b = %u\n",
 		w, x1, y1, x2, y2, color.r, color.g, color.b);
 	cairo_line(cr, w, x1, y1, x2, y2, color);
@@ -684,6 +714,7 @@ void draw_line(uint32_t event_id)
 		top = y2;
 		height = y1 - y2;
 	}
+	printf_log_time();
 	printf("show part left = %u, top = %u, width = %u, height = %u\n", left, top, width, height);
 	show_part(left, top, width, height);
 //	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
@@ -705,6 +736,7 @@ void draw_label(uint32_t event_id)
 		return;
 	input_buf[rcnt] = 0;
 	char *tok = strmbtok ( input_buf, " ", acOpen, acClose);
+	printf_log_time();
     printf ( "%s\n", tok);
     while ( ( tok = strmbtok ( NULL, " ", acOpen, acClose)) != NULL) {
         printf ( "%s\n", tok);
@@ -751,6 +783,7 @@ dk_control *add_control_and_show(uint32_t event_id, uint16_t id, uint16_t parent
 	bool visible,
 	void *control_data)
 {
+	printf_log_time();
 	printf("Adding control\n");
 	//if(width == 0 || height == 0
 	//	|| left + width > LCD_WIDTH
@@ -761,24 +794,28 @@ dk_control *add_control_and_show(uint32_t event_id, uint16_t id, uint16_t parent
 	visible = visible > 0;
 	dk_control *control = add_control(id, parent_id, type, left, top, width, height,
 		visible, control_data);
+
+		
 	if(control == NULL)
 	{
+		printf_log_time();
 		printf("Error!!!\n");
 		return NULL;
 	}
 
-	my_write_event(event_id, id, "crok");	
+	my_write_event(event_id, id, "crok");
+
 	if(visible)
 	{
 		control_position_t abs_pos = show_control(cr, control);
 		if(abs_pos.left == UNDEF_POS_VAL)
 		{
-			printf("Error abs pos!!!\n");
+			printf_log_time();
+			printf("Error abs pos in add_control_and_show!!!\n");
 			return NULL;
 
 		}
 
-		
 		show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
 	}
 	return control;
@@ -788,6 +825,7 @@ dk_control *add_control_and_show(uint32_t event_id, uint16_t id, uint16_t parent
 // echo -e 'dlbl\x02\x00\x20\x00\x60\x00\x80\x00\x60\x00\x24\x00\x11\x12\x80\x05\x00Logos' > /tmp/kedei_lcd_in
 void draw_d_label(uint32_t event_id)
 {
+	printf_log_time();
 	printf("draw_d_label\n");
 	struct __attribute__((__packed__)) //d_text_box_data_tag
 	{
@@ -823,7 +861,8 @@ void draw_d_label(uint32_t event_id)
 			return;
 		input_buf[d_label_data.text_len] = 0;
 	}
-	
+
+	printf_log_time();
 	printf("id = %u, font_size = %u, x = %u, y = %u, width = %u, height = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
 		d_label_data.id, d_label_data.font_size, d_label_data.x, d_label_data.y, d_label_data.width, d_label_data.height, 
 		d_label_data.r, d_label_data.g, d_label_data.b, d_label_data.text_len,
@@ -840,12 +879,14 @@ void draw_d_label(uint32_t event_id)
 	if(slen > 0)
 	{
 		text_box_data->text = malloc(slen + 1);
-		strcpy(text_box_data->text, input_buf);
+		strncpy(text_box_data->text, input_buf, slen);
+		text_box_data->text[slen] = 0;
 	}
 	else
 	{
 		text_box_data->text = NULL;
 	}
+	printf("Text address %ld\n", (long)text_box_data->text);
 	
 	add_control_and_show(event_id, d_label_data.id, d_label_data.parent_id, CT_LABEL,
 		d_label_data.x, d_label_data.y, d_label_data.width, d_label_data.height,
@@ -856,6 +897,7 @@ void draw_d_label(uint32_t event_id)
 // echo -e 'dtbx\x01\x00\0x00\0x00\x60\x00\x50\x00\x60\x00\x24\x00\x20\x00\x11\x80\x13\x05\x00Hello' > /tmp/kedei_lcd_in
 void draw_d_text_box(uint32_t event_id)
 {
+	printf_log_time();
 	printf("draw_d_text_box\n");
 	struct __attribute__((__packed__)) d_text_box_data_tag
 	{
@@ -888,7 +930,8 @@ void draw_d_text_box(uint32_t event_id)
 			return;
 		input_buf[d_text_box_data.text_len] = 0;
 	}
-	
+
+	printf_log_time();
 	printf("id = %u, parent_id = %u, font_size = %u, x = %u, y = %u, width = %u, height = %u, r = %u, g = %u, b = %u, text_len = %u, text = %s\n",
 		d_text_box_data.id, d_text_box_data.parent_id, d_text_box_data.font_size, d_text_box_data.x, d_text_box_data.y, d_text_box_data.width, d_text_box_data.height, 
 		d_text_box_data.r, d_text_box_data.g, d_text_box_data.b, d_text_box_data.text_len,
@@ -905,7 +948,8 @@ void draw_d_text_box(uint32_t event_id)
 	if(slen > 0)
 	{
 		text_box_data->text = malloc(slen + 1);
-		strcpy(text_box_data->text, input_buf);
+		strncpy(text_box_data->text, input_buf, slen);
+		text_box_data->text[slen] = 0;
 	}
 	else
 	{
@@ -919,6 +963,7 @@ void draw_d_text_box(uint32_t event_id)
 
 void  draw_d_panel(uint32_t event_id)
 {
+	printf_log_time();
 	printf("draw_d_panel\n");
 	struct __attribute__((__packed__)) d_panel_data_tag
 	{
@@ -950,23 +995,33 @@ void  draw_d_panel(uint32_t event_id)
 
 }
 
-void local_set_text(dk_control *control, char *new_text)
+dk_control *local_set_text(uint16_t control_id, char *new_text)
 {
+	dk_control *control = find_control(control_id);
+	if(control == NULL)
+	{
+		printf_log_time();
+		printf("local set text control = NULL!\n");
+		return NULL;
+	}
+	printf("local set text control_id = %u\n", control->id);
 	control_position_t abs_pos = set_text(cr, control, new_text);
 	if(abs_pos.left == UNDEF_POS_VAL)
 	{
-		printf("Error abs pos!!!\n");
-		return;
+		printf_log_time();
+		printf("Error abs pos in local_set_text!!!\n");
+		return NULL;
 
 	}
 	show_part(abs_pos.left, abs_pos.top, abs_pos.width, abs_pos.height);
-	
+	return control;
 }
 
 //              id     
 // echo -e 'dstx\x01\x00\x05\x00World' > /tmp/kedei_lcd_in
 void d_set_text(uint32_t event_id)
 {
+	printf_log_time();
 	printf("set text\n");
 	struct __attribute__((__packed__))
 	{
@@ -978,6 +1033,7 @@ void d_set_text(uint32_t event_id)
 	my_read_count(client_to_server, &d_set_text_data, sizeof(d_set_text_data), &rcnt);
 	if(rcnt < sizeof(d_set_text_data))
 		return;
+	printf_log_time();
 	printf("set text for id = %u text len = %u\n", d_set_text_data.id, d_set_text_data.text_len);
 	char *new_text = NULL;
 	if(d_set_text_data.text_len > 0)
@@ -987,22 +1043,24 @@ void d_set_text(uint32_t event_id)
 		my_read_count(client_to_server, input_buf, d_set_text_data.text_len, &rcnt);
 		if(rcnt < d_set_text_data.text_len)
 		{
+			printf_log_time();
 			printf("need read %u, but read %d\n", d_set_text_data.text_len, rcnt);
 			return;
 		}
 		input_buf[d_set_text_data.text_len] = 0;
 		new_text = input_buf;
 	}
-	
+	printf_log_time();
 	printf("Read text (%d) %s\n", d_set_text_data.text_len, new_text);
-	dk_control *control = find_control(d_set_text_data.id);
+	/*dk_control *control = find_control(d_set_text_data.id);
 	if(control == NULL)
 	{
+		printf_log_time();
 		printf("control not found!");
 		return;
-	}
+	}*/
 
-	local_set_text(control, new_text);
+	local_set_text(d_set_text_data.id, new_text);
 	
 	/*control_position_t abs_pos = set_text(cr, control, new_text);
 	if(abs_pos.left == UNDEF_POS_VAL)
@@ -1017,6 +1075,7 @@ void d_set_text(uint32_t event_id)
 //dsim
 void d_set_image(uint32_t event_id)
 {
+	printf_log_time();
 	printf("d_set_image\n");
 	struct __attribute__((__packed__))
 	{
@@ -1032,16 +1091,17 @@ void d_set_image(uint32_t event_id)
 	my_read_count(client_to_server, &d_image_data, sizeof(d_image_data), &rcnt);
 	if(rcnt < sizeof(d_image_data))
 	{
+		printf_log_time();
 		printf("Not need data! read: %d, need: %d\n", rcnt, sizeof(d_image_data));
 		return;
 	}
-
+	printf_log_time();
 	printf("id = %u, image_type = %u, scale_type = %u, image_len = %u\n",
 		d_image_data.id, 
 		d_image_data.image_type, d_image_data.scale_type,
 		d_image_data.image_len);	
 
-	
+	printf_log_time();
 	printf("Image size = %u\n", d_image_data.image_len);
 	uint8_t *image_src = NULL;
 	if(d_image_data.image_len > 0)
@@ -1053,6 +1113,7 @@ void d_set_image(uint32_t event_id)
 		bool all_read = my_read_count(client_to_server, image_src, d_image_data.image_len, &rcnt);
 		if(rcnt == 0 || !all_read)
 			return;
+		printf_log_time();
 		printf("Read image success!\n");
 	}
 
@@ -1087,6 +1148,7 @@ void d_set_image(uint32_t event_id)
 
 void d_set_visible(uint32_t event_id)
 {
+	printf_log_time();
 	printf("set visible\n");
 	struct __attribute__((__packed__))
 	{
@@ -1103,6 +1165,7 @@ void d_set_visible(uint32_t event_id)
 	dk_control *control = find_control(d_set_visible_data.id);
 	if(control == NULL)
 	{
+		printf_log_time();
 		printf("control not found!");
 		return;
 	}
@@ -1124,6 +1187,7 @@ void d_set_visible(uint32_t event_id)
 
 void d_set_time_control(uint32_t event_id)
 {
+	printf_log_time();
 	printf("d_set_time_control\n");
 	struct __attribute__((__packed__))
 	{
@@ -1138,7 +1202,7 @@ void d_set_time_control(uint32_t event_id)
 	my_read_count(client_to_server, &d_set_cime_ctrl_data, sizeof(d_set_cime_ctrl_data), &rcnt);
 	if(rcnt < sizeof(d_set_cime_ctrl_data))
 		return;
-
+	printf_log_time();
 	printf("time_id = %u, date_id = %u, date_time_combination = %u, time_format = %u, date_format = %u\n",
 		d_set_cime_ctrl_data.time_id, d_set_cime_ctrl_data.date_id,
 		d_set_cime_ctrl_data.date_time_combination,
@@ -1146,18 +1210,103 @@ void d_set_time_control(uint32_t event_id)
 
 	if(d_set_cime_ctrl_data.time_id > 0)
 	{
-		time_control = find_control(d_set_cime_ctrl_data.time_id);
+		time_control_id = d_set_cime_ctrl_data.time_id;
+		//if(time_control == NULL)
+		//{
+		//	printf("time_control not found!\n");
+		//}
+		//else
+		//{
+		//	printf("time_control id = %u! link = %u\n", time_control->id, (uint)time_control);
+		//}
 	}
 
 	if(d_set_cime_ctrl_data.date_id > 0)
 	{
-		date_control = find_control(d_set_cime_ctrl_data.date_id);
+		date_control_id = d_set_cime_ctrl_data.date_id;
 	}
 
 	date_time_comb = d_set_cime_ctrl_data.date_time_combination;
 	date_time_time_fmt = d_set_cime_ctrl_data.time_format;
 	date_time_date_fmt = d_set_cime_ctrl_data.date_format;
 	need_change_time_format = true;
+	
+}
+
+// sys_value_id:
+// 0 - free memory
+// 1 - free mem percent
+// 2 - used mem
+// 3 - used mem percent
+void d_set_sys_control(uint32_t event_id)
+{
+	printf_log_time();
+	printf("d_set_sys_control\n");
+	struct __attribute__((__packed__))
+	{
+		uint8_t sys_value_id;
+		uint16_t control_id;
+		//uint8_t date_time_combination;	
+		//uint8_t time_format;	
+		//uint8_t date_format;	
+	}d_set_sys_ctrl_data;
+	
+	int rcnt;
+	my_read_count(client_to_server, &d_set_sys_ctrl_data, sizeof(d_set_sys_ctrl_data), &rcnt);
+	if(rcnt < sizeof(d_set_sys_ctrl_data))
+		return;
+		
+	printf_log_time();
+	printf("sys_value_id = %u, control_id = %u\n",
+		d_set_sys_ctrl_data.sys_value_id, d_set_sys_ctrl_data.control_id);
+
+	if(sys_controls_cnt >= MAX_SYS_CONTROLS)
+	{
+		printf("Error! Sys controls count MAX!");
+		return;
+	}
+
+	if(d_set_sys_ctrl_data.control_id == 0)
+	{
+		printf("Error! Sys control id = 0!");
+		return;
+	}
+
+	if(d_set_sys_ctrl_data.sys_value_id > 3)
+	{
+		printf("Error! Sys value id unknown!");
+		return;
+	}
+
+	sys_controls_id[sys_controls_cnt] = d_set_sys_ctrl_data.control_id;
+	sys_controls_type[sys_controls_cnt] = d_set_sys_ctrl_data.sys_value_id;
+	sys_controls_cnt++;
+
+	/*if(d_set_sys_ctrl_data.control_id > 0)
+	{
+	* extern volatile uint8_t sys_controls_cnt;
+extern volatile uint16_t sys_controls_id[MAX_SYS_CONTROLS];
+extern volatile uint8_t sys_controls_type[MAX_SYS_CONTROLS];
+		time_control_id = d_set_cime_ctrl_data.time_id;
+		//if(time_control == NULL)
+		//{
+		//	printf("time_control not found!\n");
+		//}
+		//else
+		//{
+		//	printf("time_control id = %u! link = %u\n", time_control->id, (uint)time_control);
+		//}
+	}
+
+	if(d_set_cime_ctrl_data.date_id > 0)
+	{
+		date_control_id = d_set_cime_ctrl_data.date_id;
+	}
+
+	date_time_comb = d_set_cime_ctrl_data.date_time_combination;
+	date_time_time_fmt = d_set_cime_ctrl_data.time_format;
+	date_time_date_fmt = d_set_cime_ctrl_data.date_format;
+	need_change_time_format = true;*/
 	
 }
 /*
@@ -1177,6 +1326,7 @@ void d_set_time_control(uint32_t event_id)
  */
 void draw_d_image(uint32_t event_id)
 {
+	printf_log_time();
 	printf("static image\n");
 	struct __attribute__((__packed__))
 	{
@@ -1199,17 +1349,18 @@ void draw_d_image(uint32_t event_id)
 	my_read_count(client_to_server, &d_image_data, sizeof(d_image_data), &rcnt);
 	if(rcnt < sizeof(d_image_data))
 	{
+		printf_log_time();
 		printf("Not need data! read: %d, need: %d\n", rcnt, sizeof(d_image_data));
 		return;
 	}
-
+	printf_log_time();
 	printf("id = %u, parent_id = %u, x = %u, y = %u, width = %u, height = %u, visible = %u, image_type = %u, scale_type = %u, image_len = %u\n",
 		d_image_data.id, d_image_data.parent_id, d_image_data.x, d_image_data.y,
 		d_image_data.width, d_image_data.height, d_image_data.visible,
 		d_image_data.image_type, d_image_data.scale_type,
 		d_image_data.image_len);	
 
-	
+	printf_log_time();
 	printf("Image size = %u\n", d_image_data.image_len);
 	uint8_t *image_src = NULL;
 	if(d_image_data.image_len > 0)
@@ -1224,7 +1375,8 @@ void draw_d_image(uint32_t event_id)
 		printf("Read image success!\n");
 	}
 
-	struct dk_image_data_tag *dk_image_data = (struct dk_image_data_tag*)malloc(sizeof(struct dk_image_data_tag));
+	struct dk_image_data_tag *dk_image_data =
+		(struct dk_image_data_tag*)malloc(sizeof(struct dk_image_data_tag));
 	dk_image_data->image_type = d_image_data.image_type;
 	dk_image_data->scale_type = d_image_data.scale_type;
 	dk_image_data->bg_color.r = d_image_data.bg_r;
@@ -1259,6 +1411,7 @@ void draw_controls_by_parent(uint16_t parent_id)
 
 void redraw_all()
 {
+	printf_log_time();
 	printf("redraw_all\n");
 	cairo_clear_all(cr);
 	draw_controls_by_parent(0);
@@ -1275,26 +1428,29 @@ void redraw_all()
 // echo -e 'ddec\x01\x00' > /tmp/kedei_lcd_in
 void d_delete_control(uint32_t event_id)
 {
+	printf_log_time();
 	printf("Delete control\n");
 	uint16_t id;
 	int rcnt;
 	my_read_count(client_to_server, &id, 2, &rcnt);
 	if(rcnt < 2)
 	{
+		printf_log_time();
 		printf("Not need data! read: %d, need: %d\n", rcnt, 2);
 		return;
 	}
 
-	if(time_control != NULL && time_control->id == id)
+	if(time_control_id == id)
 	{
-		time_control = NULL;
+		time_control_id = 0 ;
 	}
-	if(date_control != NULL && date_control->id == id)
+	if(date_control_id == id)
 	{
-		date_control = NULL;
+		date_control_id = 0;
 	}
 	if(!delete_control(id))
 	{
+		printf_log_time();
 		printf("Eror deleting control with id = %d!\n", id);
 		return;
 	}
@@ -1305,34 +1461,35 @@ void d_delete_control(uint32_t event_id)
 
 void d_delete_all_controls(uint32_t event_id)
 {
+	printf_log_time();
 	printf("Delete all controls...\n");
-	if(time_control != NULL)
-	{
-		time_control = NULL;
-	}
-	if(date_control != NULL)
-	{
-		date_control = NULL;
-	}
+	time_control_id = 0;
+	date_control_id = 0;
+	sys_controls_cnt = 0;
 
 	delete_all_controls();
 	cairo_clear_all(cr);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
 	
 }
+
+
+
 	
 // return: true - exit
 bool process_signature(uint32_t event_id, uint8_t sig[])
 {
-	printf("\n=========  process_signature  ==========\n");
+	//printf("\n=========  process_signature ");// ==========\n");
 	if(compare_signature(sig, "exit"))
 	{
+		printf("\n=========  process_signature " KGRN KBOLD "exit" KNRM " ==========\n");
 		close(client_to_server);
 		return true;
 	}
 	// Line 
 	if(compare_signature(sig, "line"))
 	{
+		printf("\n=========  process_signature " KGRN KBOLD "line" KNRM " ==========\n");
 		draw_line(event_id);
 		return false;
 	}
@@ -1344,12 +1501,14 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	}
 	if(compare_signature(sig, "dlbl"))
 	{
+		printf("\n=========  process_signature " KGRN KBOLD "dlbl New Label" KNRM " ==========\n");
 		draw_d_label(event_id);
 		return false;
 	}
 	// text box
 	if(compare_signature(sig, "dtbx"))
 	{
+		printf("\n=========  process_signature " KGRN KBOLD "dtbx New Textbox" KNRM " ==========\n");
 		draw_d_text_box(event_id);
 		return false;
 	}
@@ -1357,6 +1516,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// panel
 	if(compare_signature(sig, "dpan"))
 	{
+		printf("\n=========  process_signature " KGRN KBOLD "dpan New Panel" KNRM " ==========\n");
 		draw_d_panel(event_id);
 		return false;
 	}
@@ -1364,6 +1524,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// show image
 	if(compare_signature(sig, "dimg"))
 	{
+		printf("\n=========  process_signature " KGRN KBOLD "dimg New Image" KNRM " ==========\n");
 		draw_d_image(event_id);
 		return false;
 	}
@@ -1372,6 +1533,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// export PNG
 	if(compare_signature(sig, "expo"))
 	{
+		printf("\n=========  process_signature " KMAG KBOLD "expo Save Screen" KNRM " ==========\n");
 		export_png(event_id);
 		return false;
 	}
@@ -1379,6 +1541,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// get screenshot
 	if(compare_signature(sig, "dexp"))
 	{
+		printf("\n=========  process_signature " KMAG KBOLD "dexp Export Screen" KNRM " ==========\n");
 		d_export_png(event_id);
 		return false;
 	}
@@ -1386,6 +1549,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// set text
 	if(compare_signature(sig, "dstx"))
 	{
+		printf("\n=========  process_signature " KYEL KBOLD "dstx Set text" KNRM " ==========\n");
 		d_set_text(event_id);
 		return false;
 	}
@@ -1393,6 +1557,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// set visible
 	if(compare_signature(sig, "dsvi"))
 	{
+		printf("\n=========  process_signature " KYEL KBOLD "dsvi Set Visible" KNRM " ==========\n");
 		d_set_visible(event_id);
 		return false;
 	}
@@ -1400,13 +1565,24 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// set label control for draw time
 	if(compare_signature(sig, "dstc"))
 	{
+		printf("\n=========  process_signature " KYEL KBOLD "dstc Set Date and time controls" KNRM " ==========\n");
 		d_set_time_control(event_id);
 		return false;
-	}	
+	}
+
+	// set label control for draw system info
+	if(compare_signature(sig, "dsyc"))
+	{
+		printf("\n=========  process_signature " KYEL KBOLD "dsyc Set Sys info control" KNRM " ==========\n");
+		d_set_sys_control(event_id);
+		return false;
+	}
+	
 	
 	// set image
 	if(compare_signature(sig, "dsim"))
 	{
+		printf("\n=========  process_signature " KYEL KBOLD "dsim Set Image" KNRM " ==========\n");
 		d_set_image(event_id);
 		return false;
 	}
@@ -1414,6 +1590,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// delete control
 	if(compare_signature(sig, "ddec"))
 	{
+		printf("\n=========  process_signature " KRED KBOLD "ddec Delete Control" KNRM " ==========\n");
 		d_delete_control(event_id);
 		return false;
 	}
@@ -1421,6 +1598,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 	// delete all controls
 	if(compare_signature(sig, "ddac"))
 	{
+		printf("\n=========  process_signature " KRED KBOLD "ddac Delete All controls!" KNRM " ==========\n");
 		d_delete_all_controls(event_id);
 		return false;
 	}
@@ -1451,7 +1629,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 			break;
 		}
 	}*/
-	
+	printf_log_time();
 	printf("Unknown signature!\n");//, allRead Read %u bytes!
 	return false;
 }
@@ -1459,7 +1637,7 @@ bool process_signature(uint32_t event_id, uint8_t sig[])
 
 int fifo_loop()
 {
-	
+	printf_log_time();
 	printf("Server ON..............bufer = %d\n", MYBUF);
 	char *client_to_server_name = "/tmp/kedei_lcd_in";
 
@@ -1499,6 +1677,7 @@ int fifo_loop()
 	printf("Server ON.\n");
 	while(1)
 	{
+		printf_log_time();
 		printf("Opening FIFO %s adn waiting for clients ...\n", client_to_server_name);
 		client_to_server = open(client_to_server_name, O_RDONLY);//
 		if(client_to_server < 0)
@@ -1516,6 +1695,7 @@ int fifo_loop()
 			}
 			if(read_count < 4)
 			{
+				printf_log_time();
 				printf("Error! Event id need at least %d bytes!\n", SIGNATURE_SIZE);
 				//close(client_to_server);
 				continue;
@@ -1528,6 +1708,7 @@ int fifo_loop()
 			}
 			if(read_count < SIGNATURE_SIZE)
 			{
+				printf_log_time();
 				printf("Error! Signature need at least %d bytes!\n", SIGNATURE_SIZE);
 				//close(client_to_server);
 				continue;
@@ -1545,13 +1726,13 @@ int fifo_loop()
 		close(client_to_server);
 		
 	}
+	printf_log_time();
+	printf("Server OFF.\n");
+	//close(server_to_client);
 
-   printf("Server OFF.\n");
-   //close(server_to_client);
-
-   unlink(client_to_server_name);
-   unlink(server_to_client_name);
-   return 0;
+	unlink(client_to_server_name);
+	unlink(server_to_client_name);
+	return 0;
 }
 
 
@@ -1567,14 +1748,17 @@ bool load_settings()
 	struct passwd *pw = getpwuid(getuid());
 
 	const char *homedir = pw->pw_dir;
+	printf_log_time();
 	printf("homedir = %s\n", homedir);
-	char *fullpath = malloc(strlen(homedir) + strlen(SETTING_FILE) + 1);
+	int fullpathLen = strlen(homedir) + strlen(SETTING_FILE) + 1;
+	char *fullpath = malloc(fullpathLen);
 	if (fullpath == NULL)
 	{
 		printf("Error allocate memory for setting path!\n");
 		return false;
 	}
-	sprintf(fullpath, "%s%s", homedir, SETTING_FILE);
+	snprintf(fullpath, fullpathLen, "%s%s", homedir, SETTING_FILE);
+	fullpath[fullpathLen - 1] = '\0';
 	printf("Full settings path = %s\n", fullpath);
 
 	config_t cfg; 
@@ -1634,14 +1818,18 @@ void save_settings()
 	struct passwd *pw = getpwuid(getuid());
 
 	const char *homedir = pw->pw_dir;
+	printf_log_time();
 	printf("homedir = %s\n", homedir);
-	char *fullpath = malloc(strlen(homedir) + strlen(SETTING_FILE) + 1);
+	int fullpathLen = strlen(homedir) + strlen(SETTING_FILE) + 1;
+	char *fullpath = malloc(fullpathLen);
 	if (fullpath == NULL)
 	{
+		printf_log_time();
 		printf("Error allocate memory for setting path!\n");
 		return;
 	}
-	sprintf(fullpath, "%s%s", homedir, SETTING_FILE);
+	snprintf(fullpath, fullpathLen, "%s%s", homedir, SETTING_FILE);
+	fullpath[fullpathLen - 1] = '\0';
 	printf("Full settings path = %s\n", fullpath);
 
 	config_t cfg; 
@@ -1671,6 +1859,7 @@ void save_settings()
 	// Write out the new configuration. 
 	if(! config_write_file(&cfg, fullpath))
 	{
+		printf_log_time();
 		fprintf(stderr, "Error while writing file.\n");
 	}
 	config_destroy(&cfg);
@@ -1716,7 +1905,7 @@ bool calibrate_touch()
 		
 	cairo_clear_all(cr);
 	show_part(0, 0, LCD_WIDTH, LCD_HEIGHT);
-	
+	printf_log_time();
 	printf("Calibrating touch...\n");
 	draw_text_in_rect(cr, 30, 130, 150, 240, 36, get_std_color(COL_BLACK), get_std_color(COL_BG_COLOR), TA_CENTER_MIDDLE, "Calibrating...");
 	show_part(130, 150, 240, 36);
@@ -1731,6 +1920,7 @@ bool calibrate_touch()
 	}
 	lt_x = touch_raw_x;
 	lt_y = touch_raw_y;
+	printf_log_time();
 	printf("Top left: x = %d y = %d \n", lt_x, lt_y);
 	draw_calib_circle(30, 30);
 	
@@ -1744,6 +1934,7 @@ bool calibrate_touch()
 	}
 	rt_x = touch_raw_x;
 	rt_y = touch_raw_y;
+	printf_log_time();
 	printf("Top right: x = %d y = %d \n", rt_x, rt_y);
 	if(abs(lt_y - rt_y) > CALIB_ERR_DIST)
 	{
@@ -1855,6 +2046,9 @@ bool calibrate_touch()
 
 int main(int argc,char *argv[]) 
 {
+	time_control_id = 0;
+	date_control_id = 0;
+	sys_controls_cnt = 0;
 	//cairo_test();
 	//return 0;
 	
@@ -1911,7 +2105,7 @@ int main(int argc,char *argv[])
       default:
         abort ();
       }
-
+	printf_log_time();
 	printf ("rotation = %d, aflag = %d, bflag = %d, cvalue = %s, bmpFile = %s \n",
           initRotation, aflag, bflag, cvalue, bmpFile);
 
@@ -1962,7 +2156,7 @@ int main(int argc,char *argv[])
 	
 
 	
-	
+	printf_log_time();
 	printf ("Init LCD\n");
 	//delayms(3000);
 	lcd_init(initRotation);
@@ -2002,13 +2196,7 @@ int main(int argc,char *argv[])
 	dk_control *time_control = add_control_and_show(255, 0, CT_LABEL, 0, 200, 150, 36, text_box_data);
 	*/
 
-	create_time_thread(time_control);
-
-
-
-
-
-
+	create_time_thread();//time_control
 
 
 	
@@ -2057,6 +2245,15 @@ void on_touch(uint16_t x, uint16_t y)
 		com_data.y = y - abs_pos.top;
 		
 	}
+	printf_log_time();
 	printf("on_touch id = %u\n", id);
 	my_write_event_with_add(0, id, "toch", &com_data, sizeof(com_data), true);
+}
+
+
+void printf_log_time()
+{
+	time_t t = time(NULL);
+	struct tm *tm = localtime(&t);
+	printf("%2u:%02u:%02u ", tm->tm_hour, tm->tm_min, tm->tm_sec);
 }

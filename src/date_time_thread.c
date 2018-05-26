@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/sysinfo.h>
 
 #include "date_time_thread.h"
 
@@ -18,8 +19,15 @@ enum date_time_time_fmt_tag date_time_time_fmt = DT_TM_HH_0MM;
 enum date_time_date_fmt_tag date_time_date_fmt = DT_DT_DD_MM_YYYY;
 bool need_change_time_format = false;
 
-dk_control *time_control = NULL;
-dk_control *date_control = NULL;
+//dk_control *time_control = NULL;
+//dk_control *date_control = NULL;
+volatile uint16_t time_control_id;
+volatile uint16_t date_control_id;
+
+volatile uint8_t sys_controls_cnt;
+volatile uint16_t sys_controls_id[MAX_SYS_CONTROLS];
+volatile uint8_t sys_controls_type[MAX_SYS_CONTROLS];
+
 
 bool dt_show_seconds = false;
 
@@ -218,7 +226,7 @@ void* doTimeShow(void *arg)
 			last_minute = 100;
 			last_day = 100;			
 		}
-		if(time_control == NULL && date_control == NULL)
+		if(time_control_id == 0 && date_control_id == 0)
 			continue;
 		time_t t = time(NULL);
 		struct tm *tm = localtime(&t);
@@ -228,31 +236,61 @@ void* doTimeShow(void *arg)
 		last_second = tm->tm_sec;
 		// If not need to show seconds
 		// Show time on minute change
-		if(!dt_show_seconds && tm->tm_min == last_minute)
+		if(!dt_show_seconds && (tm->tm_min == last_minute))
 		{
 			continue;
 		}
+		//printf("last_minute = %d, tm->tm_min = %d\n", last_minute, tm->tm_min);
 		last_minute = tm->tm_min;
+
+		if(sys_controls_cnt > 0)
+		{
+			struct sysinfo info;
+			sysinfo(&info);
+			char sysbuf [50];
+			
+			for(uint8_t i = 0; i < sys_controls_cnt; i++)
+			{
+				switch(sys_controls_type[i])
+				{
+					case 0: // free mem
+						sprintf (sysbuf, "%u", (uint32_t)info.freeram);
+						break;
+					case 1: // free mem percent
+						sprintf (sysbuf, "%u%%", (uint32_t)(info.freeram / (double)info.totalram * 100));
+						break;
+					case 2: // used mem
+						sprintf (sysbuf, "%u", (uint32_t)(info.totalram - info.freeram));
+						break;
+					case 3: // used mem percent
+						sprintf (sysbuf, "%u%%", (uint32_t)((info.totalram - info.freeram) / (double)info.totalram * 100));
+						break;
+				}
+				printf("Show system value: %s total ram = %u freeram = %u\n",
+					sysbuf, (uint32_t)info.totalram, (uint32_t)info.freeram);
+				local_set_text(sys_controls_id[i], sysbuf);
+			}
+		}
 		
 		switch(date_time_comb)
 		{
 			case DT_COMB_NONE:
 				continue;
 			case DT_COMB_ONLY_TIME:
-				if(time_control == NULL)
+				if(time_control_id == 0)
 					continue;
 				strftime(dt_buf, sizeof(dt_buf), time_format_str, tm);
 				pthread_mutex_lock(&lock_draw);
-				local_set_text(time_control, dt_buf);
+				local_set_text(time_control_id, dt_buf);
 				pthread_mutex_unlock(&lock_draw);
 				break;
 			// time in time_id, date in date_id
 			case DT_COMB_TIME_AND_DATE:
-				if(time_control == NULL || date_control == NULL)
+				if(time_control_id == 0 || date_control_id == 0)
 					continue;
 				pthread_mutex_lock(&lock_draw);
 				strftime(dt_buf, sizeof(dt_buf), time_format_str, tm);
-				local_set_text(time_control, dt_buf);
+				local_set_text(time_control_id, dt_buf);
 				if(last_day != tm->tm_mday)
 				{
 					int stres = strftime(dt_buf, sizeof(dt_buf), date_format_str, tm);
@@ -264,30 +302,30 @@ void* doTimeShow(void *arg)
 					else
 					{
 						printf("date = %s\n", dt_buf);
-						local_set_text(date_control, dt_buf);
+						local_set_text(date_control_id, dt_buf);
 					}
 				}
 				pthread_mutex_unlock(&lock_draw);
 				last_day = tm->tm_mday;
 				break;
 			case DT_COMB_ONLY_DATE:
-				if(date_control == NULL)
+				if(date_control_id == 0)
 					continue;
 				if(last_day == tm->tm_mday)
 					continue;
 				last_day = tm->tm_mday;
 				strftime(dt_buf, sizeof(dt_buf), date_format_str, tm);
 				pthread_mutex_lock(&lock_draw);
-				local_set_text(date_control, dt_buf);
+				local_set_text(date_control_id, dt_buf);
 				pthread_mutex_unlock(&lock_draw);
 				break;
 			case DT_COMB_TIME_BEFORE_DATE:
 			case DT_COMB_DATE_BEFORE_TIME:
-				if(time_control == NULL)
+				if(time_control_id == 0)
 					continue;
 				strftime(dt_buf, sizeof(dt_buf), date_time_format_str, tm);
 				pthread_mutex_lock(&lock_draw);
-				local_set_text(time_control, dt_buf);
+				local_set_text(time_control_id, dt_buf);
 				pthread_mutex_unlock(&lock_draw);
 				last_day = tm->tm_mday;
 				break;

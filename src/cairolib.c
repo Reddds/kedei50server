@@ -10,8 +10,6 @@
 
 
 
-
-
 //hex_color_t BG_COLOR =  { 0xd4, 0xd0, 0xc8 };
 //hex_color_t HI_COLOR_1 = { 0xff, 0xff, 0xff };
 //hex_color_t HI_COLOR_2 = { 0xd4, 0xd0, 0xc8 };
@@ -306,7 +304,8 @@ void control_label(cairo_t *cr, uint16_t x, uint16_t y, double size, char *text,
     cairo_stroke (cr);
 }
 
-void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left,
+						uint16_t top, uint16_t width, uint16_t height,
 						hex_color_t *color,
 						hex_color_t *bg_color,
 						text_alingment_t text_aling,
@@ -318,12 +317,9 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 	cairo_text_extents_t extents;
 		
 	cairo_save (cr);
-
 	cairo_rectangle (cr, left, top, width, height);
 	cairo_clip (cr);
-
 	cairo_rectangle (cr, left, top, width, height);
-
 	printf("Clip text x = %u, y = %u, width = %u, height = %u\n",
 		left, top, width, height);
 	
@@ -342,13 +338,14 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 	cairo_select_font_face (cr, "sans", 0, 0);
 	cairo_set_font_size (cr, font_size);
 	// "yg" - for bottom extensions
+	cairo_set_line_width (cr, 1.0);
 	cairo_text_extents (cr, "Wygitf", &extents);
-
 	//printf("y_bearing = %f, height = %f\n", extents.y_bearing, extents.height);
 
 	double bot_ext = extents.height + extents.y_bearing;
 	double full_height = extents.height + bot_ext;
 	cairo_text_extents (cr, text, &extents);
+	printf("Text extents. width = %f x_advance = %f\n", extents.width, extents.x_advance);
 	uint16_t start_point_x = left;
 	uint16_t start_point_y = top + height - bot_ext;
 	switch(text_aling)
@@ -357,31 +354,31 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 			start_point_y = top + extents.height;
 			break;
 		case TA_CENTER_TOP:
-			start_point_x = left + width / 2 - extents.width / 2;
+			start_point_x = left + width / 2 - extents.x_advance / 2;
 			start_point_y = top + extents.height;
 			break;
 		case TA_RIGHT_TOP:
-			start_point_x = left + width - extents.width;
+			start_point_x = left + width - extents.x_advance;
 			start_point_y = top + extents.height;
 			break;
 		case TA_LEFT_MIDDLE:
 			start_point_y -= height / 2.0 - (full_height / 2);
 			break;
 		case TA_CENTER_MIDDLE:
-			start_point_x = left + width / 2 - extents.width / 2;
+			start_point_x = left + width / 2 - extents.x_advance / 2;
 			start_point_y -= height / 2.0 - (full_height / 2);
 			break;
 		case TA_RIGHT_MIDDLE:
-			start_point_x = left + width - extents.width;
+			start_point_x = left + width - extents.x_advance;
 			start_point_y -= height / 2.0 - (full_height / 2);
 			break;
 		case TA_LEFT_BOTTOM:
 			break;
 		case TA_CENTER_BOTTOM:
-			start_point_x = left + width / 2 - extents.width / 2;
+			start_point_x = left + width / 2 - extents.x_advance / 2;
 			break;
 		case TA_RIGHT_BOTTOM:
-			start_point_x = left + width - extents.width;
+			start_point_x = left + width - extents.x_advance;
 			break;
 
 	}
@@ -389,10 +386,8 @@ void draw_text_in_rect(cairo_t *cr, uint16_t font_size, uint16_t left, uint16_t 
 //	{
 //		start_point_y -= height / 2.0 - (full_height / 2);// + extents.y_bearing
 //	}
-	
 	cairo_move_to (cr, start_point_x, start_point_y);
 	cairo_show_text (cr, text);
-	cairo_set_line_width (cr, 1.0);
 	cairo_stroke (cr);
 
 	cairo_restore (cr);
@@ -441,7 +436,6 @@ control_position_t draw_dk_label(cairo_t *cr, dk_control *control)
 			control_position_t parent_abs_pos = get_abs_control_pos(parent_control);
 			cairo_rectangle (cr, parent_abs_pos.left, parent_abs_pos.top, parent_abs_pos.width, parent_abs_pos.height);
 			cairo_clip (cr);
-			
 			if(parent_control->type == CT_PANEL)
 			{
 				bg_color = &((struct panel_data_tag *)parent_control->control_data)->bg_color;
@@ -464,7 +458,6 @@ control_position_t draw_dk_label(cairo_t *cr, dk_control *control)
                  bg_color,
                  label_data->text_aling,
                  label_data->text);
-		
     cairo_restore (cr);
     return abs_pos;
 }
@@ -503,7 +496,8 @@ typedef struct
     uint32_t pos;
 } png_stream_to_byte_array_closure_t;
 
-static cairo_status_t read_png_stream_from_byte_array (void *in_closure, uint8_t *data, unsigned int length)
+static cairo_status_t read_png_stream_from_byte_array (void *in_closure,
+	uint8_t *data, unsigned int length)
 {
     png_stream_to_byte_array_closure_t *closure =
 		(png_stream_to_byte_array_closure_t *) in_closure;
@@ -557,7 +551,11 @@ control_position_t draw_dk_image(cairo_t *cr, dk_control *control)
 
 	cairo_new_path (cr); /* path not consumed by clip()*/
 
-	cairo_surface_t *image = cairo_image_surface_create_from_png_stream(&read_png_stream_from_byte_array, &closure);
+	cairo_surface_t *image =
+		cairo_image_surface_create_from_png_stream(&read_png_stream_from_byte_array, &closure);
+	if(true) //!!!
+	{
+
 	double img_width = cairo_image_surface_get_width(image);
 	double img_height = cairo_image_surface_get_height(image);
 
@@ -565,7 +563,7 @@ control_position_t draw_dk_image(cairo_t *cr, dk_control *control)
 
 	double scale_x = 1;// width / img_width;
 	double scale_y = 1;// height / img_height;
-
+	
 	double off_x = 0;
 	double off_y = 0;
 	switch(dk_image_data->scale_type)
@@ -603,9 +601,10 @@ control_position_t draw_dk_image(cairo_t *cr, dk_control *control)
 	off_y = -(img_height * scale_y - abs_pos.height) / 2 / scale_y;
 
 	//printf("Image scale_type = %u, scale_x = %f, scale_y = %f, off_x = %f, off_y = %f\n", dk_image_data->scale_type, scale_x, scale_y, off_x, off_y);
-	cairo_scale (cr, scale_x, scale_y);
-	cairo_set_source_surface (cr, image, off_x, off_y);
-	cairo_paint (cr);
+		cairo_scale (cr, scale_x, scale_y);
+		cairo_set_source_surface (cr, image, off_x, off_y);
+		cairo_paint (cr);
+	}
 	cairo_surface_destroy(image);	
     cairo_restore (cr);
     return abs_pos;
@@ -675,7 +674,7 @@ bool change_text(char **old, char *new)
 	{
 		if(slen > 0)
 		{
-			*old = malloc(slen);
+			*old = malloc(slen + 1);
 		}
 		else
 		{
@@ -686,10 +685,11 @@ bool change_text(char **old, char *new)
 	{
 		if(slen > 0)
 		{
-			if(slen != strlen(*old))
+			if(slen != strlen(*old)) //!!! >
 			{
-				//printf("Before realloc\n");
-				*old = (char *)realloc(*old, slen);
+				printf("Before realloc addr = %ld new size = %d\n", (long)*old, slen);
+				printf("1 ");
+				*old = (char *)realloc(*old, slen + 1);
 				//printf("After realloc\n");
 			}
 		}
@@ -700,7 +700,11 @@ bool change_text(char **old, char *new)
 	}
 	if(*old != NULL)
 	{
-		strcpy(*old, new);
+		printf("2 ");
+		strncpy(*old, new, slen);
+		printf("3 ");
+		(*old)[slen] = '\0';
+		printf("4\n");
 		//printf("Copied!\n");
 	}
 	else
@@ -713,7 +717,7 @@ bool change_text(char **old, char *new)
 
 control_position_t label_set_text(cairo_t *cr, dk_control *control, char *text)
 {
-	//printf("label_set_text\n");
+	printf("label_set_text\n");
 	if(change_text(&((struct label_data_tag *)control->control_data)->text, text))
 	{
 		//printf("draw_dk_labeldraw_dk_label new text = %s\n", ((struct label_data_tag *)control->control_data)->text);
@@ -737,7 +741,7 @@ control_position_t text_box_set_text(cairo_t *cr, dk_control *control, char *tex
 
 control_position_t set_text(cairo_t *cr, dk_control *control, char *text)
 {
-		switch(control->type)
+	switch(control->type)
 	{
 		case CT_LABEL:
 			return label_set_text(cr, control, text);

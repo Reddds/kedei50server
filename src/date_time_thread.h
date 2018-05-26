@@ -6,6 +6,24 @@
 
 #include "dk_controls.h"
 
+#define MAX_SYS_CONTROLS 10
+
+#define KNRM  "\x1B[0m"
+
+#define KBOLD  	"\x1B[1m"
+#define KITALIC "\x1B[3m"
+#define KULINE  "\x1B[4m"
+#define KSTRSTH "\x1B[9m"
+
+
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KYEL  "\x1B[33m"
+#define KBLU  "\x1B[34m"
+#define KMAG  "\x1B[35m"
+#define KCYN  "\x1B[36m"
+#define KWHT  "\x1B[37m"
+
 enum date_time_comb_tag
 {
 	DT_COMB_NONE = 0,
@@ -91,6 +109,6 @@ enum date_time_date_fmt_tag
 };
 
 void create_time_thread();
-void local_set_text(dk_control *control, char *new_text);
+dk_control *local_set_text(uint16_t control_id, char *new_text);
 
 #endif

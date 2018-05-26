@@ -35,4 +35,6 @@ void lcd_setframe(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 void create_sensor_thread();
 
 void on_touch(uint16_t x, uint16_t y);
+
+void printf_log_time();
 #endif
