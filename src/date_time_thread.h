@@ -24,6 +24,11 @@
 #define KCYN  "\x1B[36m"
 #define KWHT  "\x1B[37m"
 
+#define INFO_MSG KBOLD "[INFO]" KNRM " "
+#define SUCCESS_MSG KGRN KBOLD "[SUCC]" KNRM " "
+#define WARN_MSG KYEL KBOLD "[WARN]" KNRM " "
+#define ERR_MSG KRED KBOLD "[ERR ]" KNRM " "
+
 enum date_time_comb_tag
 {
 	DT_COMB_NONE = 0,

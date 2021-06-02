@@ -262,7 +262,8 @@ void lcd_setrotation(uint8_t m) {
 
 
 // rotation - init rotation ID
-void lcd_init(enum lcd_rotations rotation) {
+void lcd_init(enum lcd_rotations rotation)
+{
 	//reset display
 	lcd_rst();
 
@@ -765,7 +766,7 @@ void create_sensor_thread()
 	}
 	usleep(10);
 	
-	printf("sensor scan start/ Listening GPIO %u!", SENSOR_IRQ_PIN);
+	printf("sensor scan start. Listening GPIO %u!", SENSOR_IRQ_PIN);
 	gpioSetMode(SENSOR_IRQ_PIN, PI_INPUT);
 	//gpioSetPullUpDown(SENSOR_IRQ_PIN, PI_PUD_UP);
 	/* monitor IR level changes */
